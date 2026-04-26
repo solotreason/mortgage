@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' https://geocoding-api.open-meteo.com https://api.census.gov https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; upgrade-insecure-requests">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <title>MortgagePro Suite</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.2" integrity="sha384-qKt1F1k7v69ebd7q6Na1d2FGVMI+43GgA5hpfz7i+zDfrz8rIjXYu7majL1fXSeS" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
+
+    <header class="bg-white shadow-sm sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                <h1 class="text-xl font-bold tracking-tight text-gray-900">MortgagePro <span class="text-indigo-600 font-normal">Suite</span></h1>
+            </div>
+        </div>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 no-print">
+            <nav class="-mb-px flex space-x-8 overflow-x-auto scrollbar-hide" aria-label="Tabs">
+                <button type="button" data-tab="mortgage" id="tab-mortgage" class="tab-btn active whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-sm transition-colors">Mortgage Calculator</button>
+                <button type="button" data-tab="afford" id="tab-afford" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-sm transition-colors">Affordability</button>
+                <button type="button" data-tab="rentbuy" id="tab-rentbuy" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-sm transition-colors">Rent vs. Buy</button>
+                <button type="button" data-tab="refinance" id="tab-refinance" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-sm transition-colors">Refinance</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <div id="content-mortgage" class="tab-content active">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div class="lg:col-span-4 space-y-6 no-print">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                        <h2 class="text-lg font-semibold text-gray-900 flex items-center gap-2">Loan Details</h2>
+                        <div>
+                            <label class="text-xs font-medium text-gray-500 uppercase">Loan Type</label>
+                            <select id="loanType" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white">
+                                <option value="conventional">Conventional</option>
+                                <option value="fha">FHA (1.75% Upfront MIP)</option>
+                                <option value="va">VA (2.15% Funding Fee)</option>
+                            </select>
+                        </div>
+                        <div><label class="text-xs font-medium text-gray-500 uppercase">Home Price</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="homePrice" value="350,000" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Down Pmt</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="downPayment" value="17,500" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Percent</label><div class="relative"><input type="number" min="0" step="0.1" id="downPaymentPercent" value="5" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-3 pr-7"><span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span></div></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-xs font-medium text-gray-500 uppercase">Int Rate</label>
+                                <div class="relative"><input type="number" min="0" id="interestRate" value="6.5" step="0.1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-3 pr-7"><span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span></div>
+                            </div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Term</label><select id="loanTerm" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white"><option value="30">30 Yrs</option><option value="20">20 Yrs</option><option value="15">15 Yrs</option><option value="10">10 Yrs</option></select></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                        <h2 class="text-lg font-semibold text-gray-900" title="Ins means homeowners insurance premiums.">Taxes, Ins & Mortgage Insurance</h2>
+                        <div class="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <label class="text-xs font-medium text-indigo-900 uppercase">City, ST</label>
+                                <span id="locationQualityBadge" class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-indigo-50 border-indigo-200 text-indigo-700">Not Applied</span>
+                            </div>
+                            <input type="text" id="locationCity" list="locationCityOptions" placeholder="Austin, TX" autocomplete="off" class="w-full mt-1 border-indigo-200 rounded-lg shadow-sm border py-2 px-3">
+                            <datalist id="locationCityOptions"></datalist>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button type="button" id="applyLocationEstimateBtn" class="inline-flex items-center rounded-lg bg-indigo-600 text-white text-xs font-semibold px-3 py-2 hover:bg-indigo-700 transition-colors">Apply City Estimate</button>
+                                <span id="locationManualLockHint" class="text-xs text-amber-800"></span>
+                            </div>
+                            <p id="locationEstimateHint" class="text-xs text-indigo-800 leading-5">Enter City, ST and press Enter (or choose a suggestion) to auto-fill annual tax, insurance, and PMI/MIP assumptions from live city/county/metro/state data.</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Prop Tax (Yr)</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="propertyTax" value="4,200" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Ins (Yr)</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="homeInsurance" value="4,800" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase" title="HOA means homeowners association dues charged monthly.">HOA (Mo)</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="hoaFee" value="350" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase" title="PMI means Private Mortgage Insurance (usually conventional loans). MIP means Mortgage Insurance Premium (usually FHA loans).">PMI/MIP Rate (Yr)</label><div class="relative"><input type="number" min="0" id="pmiRate" value="0.75" step="0.05" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-3 pr-7"><span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span></div></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase" title="Choose when conventional PMI should end. 78% is strict HPA auto-termination, 80% is common borrower-request cancellation.">Conv PMI Rule</label><select id="convPmiRule" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white"><option value="strict78">Strict HPA Auto (78% LTV)</option><option value="request80">Borrower Request (80% LTV)</option><option value="custom">Custom LTV</option></select></div>
+                            <div id="convPmiCustomWrap"><label class="text-xs font-medium text-gray-500 uppercase" title="LTV means Loan-to-Value ratio.">Custom PMI Drop LTV</label><div class="relative"><input type="number" min="50" max="95" id="convPmiDropLtv" value="78" step="1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-3 pr-7"><span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span></div></div>
+                            <div class="flex items-center gap-2 pt-6">
+                                <input type="checkbox" id="vaFeeExempt" class="h-4 w-4 rounded border-gray-300 text-indigo-600">
+                                <label for="vaFeeExempt" class="text-xs font-medium text-gray-600 uppercase">VA Fee Exempt</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                        <h2 class="text-lg font-semibold text-gray-900" title="APR means Annual Percentage Rate, which reflects loan cost beyond base interest.">Loan Costs & APR Inputs</h2>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Discount Points</label><div class="relative"><input type="number" min="0" id="discountPoints" value="0" step="0.125" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-3 pr-7"><span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span></div></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Lender Fees</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="lenderFees" value="1,500" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Other Closing Costs</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="otherClosingCosts" value="3,500" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Prepaids/Escrows</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="prepaidItems" value="2,000" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <label class="flex items-center gap-2"><input type="checkbox" id="includePointsToggle" checked class="h-4 w-4 rounded border-gray-300 text-indigo-600">Use points</label>
+                            <label class="flex items-center gap-2"><input type="checkbox" id="includeLenderFeesToggle" checked class="h-4 w-4 rounded border-gray-300 text-indigo-600">Use lender fees</label>
+                            <label class="flex items-center gap-2"><input type="checkbox" id="includeOtherCostsToggle" checked class="h-4 w-4 rounded border-gray-300 text-indigo-600">Use other costs</label>
+                            <label class="flex items-center gap-2"><input type="checkbox" id="includePrepaidsToggle" checked class="h-4 w-4 rounded border-gray-300 text-indigo-600">Use prepaids</label>
+                            <label class="flex items-center gap-2"><input type="checkbox" id="financePointsToggle" class="h-4 w-4 rounded border-gray-300 text-indigo-600">Finance points into loan</label>
+                            <label class="flex items-center gap-2"><input type="checkbox" id="financeCostsToggle" class="h-4 w-4 rounded border-gray-300 text-indigo-600">Finance lender/other costs into loan</label>
+                            <div class="col-span-2"><label class="text-xs font-medium text-gray-500 uppercase" title="Gov means government-backed loan fees, such as FHA upfront MIP or VA funding fee.">Gov Fee/MIP Handling</label><select id="govtFeeMode" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white"><option value="financed">Finance into Loan</option><option value="upfront">Pay Upfront</option></select></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-indigo-50 p-6 rounded-2xl shadow-sm border border-indigo-100 space-y-4">
+                        <h2 class="text-lg font-semibold text-indigo-900">Payoff Accelerator</h2>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><label class="text-xs font-medium text-indigo-900 uppercase">Extra Monthly</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-indigo-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="extraPayment" value="0" class="w-full mt-1 border-indigo-200 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                            <div><label class="text-xs font-medium text-indigo-900 uppercase">For Years</label><input type="number" min="0" step="1" id="extraPaymentYears" value="30" class="w-full mt-1 border-indigo-200 rounded-lg shadow-sm border py-2 px-3"></div>
+                        </div>
+                        <div class="flex items-center justify-between pt-2">
+                            <span class="text-sm font-medium text-indigo-900">True Bi-Weekly (26/yr)?</span>
+                            <div class="relative inline-block w-10 align-middle select-none"><input type="checkbox" id="biWeeklyToggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer border-indigo-200"/><label for="biWeeklyToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-indigo-200 cursor-pointer"></label></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><label class="text-xs font-medium text-indigo-900 uppercase">One-Time Lump Sum</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-indigo-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="lumpSumAmount" value="0" class="w-full mt-1 border-indigo-200 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                            <div><label class="text-xs font-medium text-indigo-900 uppercase">Apply at Month</label><input type="number" min="1" id="lumpSumMonth" value="12" class="w-full mt-1 border-indigo-200 rounded-lg shadow-sm border py-2 px-3"></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <label class="flex items-center gap-2 pt-6"><input type="checkbox" id="recastToggle" class="h-4 w-4 rounded border-indigo-300 text-indigo-600">Recast After Lump Sum</label>
+                            <div><label class="text-xs font-medium text-indigo-900 uppercase">Recast Fee</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-indigo-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="recastFee" value="250" class="w-full mt-1 border-indigo-200 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="lg:col-span-8 space-y-6 print-full">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
+                            <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">Total Monthly</p>
+                            <p id="totalMonthlyDisplay" class="metric-value text-gray-900">$0</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
+                            <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">Cash to Close</p>
+                            <p id="cashToCloseDisplay" class="metric-value text-emerald-600">$0</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
+                            <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">Total Interest</p>
+                            <p id="totalInterestDisplay" class="metric-value text-gray-900">$0</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
+                            <p class="text-[10px] font-bold text-gray-500 uppercase mb-1" title="APR means Annual Percentage Rate. Eff. Cost means effective borrowing cost including finance charges.">APR (Eff. Cost)</p>
+                            <p id="aprDisplay" class="metric-value text-indigo-600">0.00%</p>
+                        </div>
+                    </div>
+
+                    <div id="mortgageInsights" class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-5">
+                        <div>
+                            <h3 class="text-sm font-semibold text-gray-900">Borrower Insights</h3>
+                            <p class="text-xs text-gray-500 mt-1">Payment phases, 5-year snapshot, loan-cost metrics, and data confidence checks.</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div class="rounded-xl bg-gray-50 border border-gray-200 p-3">
+                                <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">Timeline - Today</p>
+                                <p id="phasePaymentNow" class="text-base font-bold text-gray-900">$0</p>
+                            </div>
+                            <div class="rounded-xl bg-gray-50 border border-gray-200 p-3">
+                                <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">After PMI/MIP Ends</p>
+                                <p id="phasePaymentAfterMi" class="text-base font-bold text-emerald-700">$0</p>
+                                <p id="phasePaymentAfterMiWhen" class="text-[11px] text-gray-500"></p>
+                            </div>
+                            <div class="rounded-xl bg-gray-50 border border-gray-200 p-3">
+                                <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">After ARM Reset</p>
+                                <p id="phasePaymentArmReset" class="text-base font-bold text-gray-900">N/A</p>
+                                <p class="text-[11px] text-gray-500">Fixed-rate assumption</p>
+                            </div>
+                            <div class="rounded-xl bg-amber-50 border border-amber-200 p-3">
+                                <p class="text-[10px] font-bold text-amber-700 uppercase mb-1">Worst-Case Est.</p>
+                                <p id="phasePaymentWorst" class="text-base font-bold text-amber-800">$0</p>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-200 overflow-hidden">
+                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                                <p class="text-xs font-bold text-gray-700 uppercase">In 5 Years Snapshot</p>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-4 text-sm">
+                                <div><p class="text-[11px] uppercase text-gray-500">Total Paid</p><p id="fiveYearTotalPaid" class="font-semibold text-gray-900">$0</p></div>
+                                <div><p class="text-[11px] uppercase text-gray-500">Principal Paid</p><p id="fiveYearPrincipalPaid" class="font-semibold text-gray-900">$0</p></div>
+                                <div><p class="text-[11px] uppercase text-gray-500">Interest Paid</p><p id="fiveYearInterestPaid" class="font-semibold text-gray-900">$0</p></div>
+                                <div><p class="text-[11px] uppercase text-gray-500">MI Paid</p><p id="fiveYearMipPaid" class="font-semibold text-gray-900">$0</p></div>
+                                <div><p class="text-[11px] uppercase text-gray-500">Remaining Balance</p><p id="fiveYearBalance" class="font-semibold text-gray-900">$0</p></div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div class="rounded-xl border border-gray-200 overflow-hidden">
+                                <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                                    <p class="text-xs font-bold text-gray-700 uppercase">Closing Cost Transparency</p>
+                                </div>
+                                <div class="p-4 space-y-2 text-sm">
+                                    <div class="flex items-center justify-between"><span class="text-gray-600">Borrower-Paid at Closing</span><span id="ccBorrowerAtClose" class="font-semibold text-gray-900">$0</span></div>
+                                    <div class="flex items-center justify-between"><span class="text-gray-600">Borrower-Paid Before Closing</span><span id="ccBorrowerBeforeClose" class="font-semibold text-gray-900">$0</span></div>
+                                    <div class="flex items-center justify-between"><span class="text-gray-600">Seller Credits</span><span id="ccSellerCredits" class="font-semibold text-gray-900">$0</span></div>
+                                    <div class="flex items-center justify-between"><span class="text-gray-600">Lender Credits</span><span id="ccLenderCredits" class="font-semibold text-gray-900">$0</span></div>
+                                    <div class="flex items-center justify-between border-t pt-2"><span class="text-gray-800 font-semibold">Net Cash To Close</span><span id="ccNetCashToClose" class="font-bold text-emerald-700">$0</span></div>
+                                    <p class="text-[11px] text-gray-500">Seller/lender credits default to $0 unless entered elsewhere.</p>
+                                </div>
+                            </div>
+
+                            <div class="rounded-xl border border-gray-200 overflow-hidden">
+                                <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                                    <p class="text-xs font-bold text-gray-700 uppercase">PMI/MIP Off-Ramp</p>
+                                </div>
+                                <div class="p-4 space-y-2 text-sm">
+                                    <div class="flex items-center justify-between"><span class="text-gray-600">Projected MI End</span><span id="miProjectedEnd" class="font-semibold text-gray-900">N/A</span></div>
+                                    <div class="flex items-center justify-between"><span class="text-gray-600">80% Request Point</span><span id="miRequest80" class="font-semibold text-gray-900">N/A</span></div>
+                                    <div class="flex items-center justify-between"><span class="text-gray-600">78% Auto-Termination</span><span id="miAuto78" class="font-semibold text-gray-900">N/A</span></div>
+                                    <div class="flex items-center justify-between border-t pt-2"><span class="text-gray-800 font-semibold">Monthly Savings After MI</span><span id="miMonthlySavings" class="font-bold text-emerald-700">$0</span></div>
+                                    <p id="miOffRampNote" class="text-[11px] text-gray-500"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div class="rounded-xl border border-gray-200 p-4 space-y-2">
+                                <p class="text-xs font-bold text-gray-700 uppercase">Escrow Clarity</p>
+                                <p id="escrowIncluded" class="text-sm text-gray-700"></p>
+                                <p id="escrowExcluded" class="text-sm text-gray-700"></p>
+                                <p id="escrowAssumption" class="text-[11px] text-gray-500"></p>
+                            </div>
+                            <div class="rounded-xl border border-gray-200 p-4 space-y-2">
+                                <p class="text-xs font-bold text-gray-700 uppercase">Loan-Cost Metrics</p>
+                                <div class="flex items-center justify-between text-sm"><span class="text-gray-600">Total of Payments (Est.)</span><span id="loanTotalOfPayments" class="font-semibold text-gray-900">$0</span></div>
+                                <div class="flex items-center justify-between text-sm"><span class="text-gray-600">Total Interest Percentage (TIP)</span><span id="loanTip" class="font-semibold text-gray-900">0.00%</span></div>
+                                <p class="text-[11px] text-gray-500">Estimates use principal, interest, MI, and upfront financed-cost assumptions.</p>
+                            </div>
+                            <div class="rounded-xl border border-gray-200 p-4 space-y-2">
+                                <p class="text-xs font-bold text-gray-700 uppercase">Data Confidence</p>
+                                <p id="dataConfidenceLine" class="text-sm text-gray-700"></p>
+                                <p id="dataFreshnessLine" class="text-sm text-gray-700"></p>
+                                <p id="dataManualOverrideLine" class="text-[11px] text-gray-500"></p>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-200 overflow-hidden">
+                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                                <p class="text-xs font-bold text-gray-700 uppercase">Stress Cases</p>
+                                <p id="stressAffordabilityResult" class="text-xs font-semibold text-gray-700">Can still afford? Unknown</p>
+                            </div>
+                            <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                <div class="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                                    <p class="text-[11px] uppercase text-gray-500">+1% Interest Rate</p>
+                                    <p id="stressRateUpPayment" class="font-semibold text-gray-900">$0</p>
+                                    <p id="stressRateUpDelta" class="text-[11px] text-gray-500">$0 change</p>
+                                </div>
+                                <div class="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                                    <p class="text-[11px] uppercase text-gray-500">+20% Insurance</p>
+                                    <p id="stressInsuranceUpPayment" class="font-semibold text-gray-900">$0</p>
+                                    <p id="stressInsuranceUpDelta" class="text-[11px] text-gray-500">$0 change</p>
+                                </div>
+                                <div class="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                                    <p class="text-[11px] uppercase text-gray-500">+15% Taxes</p>
+                                    <p id="stressTaxUpPayment" class="font-semibold text-gray-900">$0</p>
+                                    <p id="stressTaxUpDelta" class="text-[11px] text-gray-500">$0 change</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="stayAfloatSection" class="hidden bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                        <div class="flex flex-wrap items-end justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-semibold text-gray-900">Stay Afloat Estimate</h3>
+                                <p class="text-xs text-gray-500 mt-1">Safety check driven by your own monthly housing, debt, and essential-spend inputs.</p>
+                            </div>
+                            <div class="w-full lg:w-auto grid grid-cols-2 gap-3 lg:min-w-[34rem]">
+                                <div>
+                                    <label class="text-[10px] font-semibold text-gray-500 uppercase">Essential Non-Housing (Mo)</label>
+                                    <div class="relative">
+                                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span>
+                                        <input type="text" inputmode="numeric" data-currency="true" id="afloatEssentials" value="1,250" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-semibold text-gray-500 uppercase">Comfort Level</label>
+                                    <select id="afloatPreset" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white text-sm">
+                                        <option value="safe">Safe (Recommended)</option>
+                                        <option value="balanced">Balanced</option>
+                                        <option value="stretch">Stretch</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="rounded-xl bg-gray-50 border border-gray-200 p-3">
+                            <p id="afloatPolicyNote" class="text-xs text-gray-600"></p>
+                        </div>
+                        <p id="afloatPresetHint" class="text-xs text-gray-600"></p>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div class="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
+                                <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">Monthly Total Needed</p>
+                                <p id="afloatMonthlyNeed" class="text-xl font-bold text-gray-900">$0</p>
+                            </div>
+                            <div class="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
+                                <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">Income to Feel Safe (Yr)</p>
+                                <p id="afloatIncomeNeed" class="text-xl font-bold text-emerald-700">$0</p>
+                            </div>
+                            <div class="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
+                                <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">Savings Cushion Goal</p>
+                                <p id="afloatReserveNeed" class="text-xl font-bold text-indigo-700">$0</p>
+                            </div>
+                        </div>
+                        <p id="afloatGapNote" class="text-xs text-gray-600"></p>
+                        <div class="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-2">
+                            <p class="text-[10px] font-bold text-slate-600 uppercase">Stress Tests</p>
+                            <div id="afloatStressTests" class="space-y-1 text-xs"></div>
+                        </div>
+                    </div>
+
+                    <div id="assumptionWarnings" class="hidden p-4 rounded-xl border text-sm"></div>
+
+                    <details class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" id="cashBreakdownDetails">
+                        <summary class="px-6 py-4 cursor-pointer text-sm font-semibold text-gray-900 bg-gray-50 select-none">Cash to Close Breakdown</summary>
+                        <div class="p-6">
+                            <div id="cashToCloseBreakdown" class="space-y-2 text-sm text-gray-700"></div>
+                        </div>
+                    </details>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                            <h3 class="text-sm font-semibold text-gray-900 mb-4">Balance Timeline</h3>
+                            <div class="relative w-full h-56"><canvas id="balanceChart"></canvas></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                            <div class="mb-4 flex items-center justify-between gap-3">
+                                <h3 class="text-sm font-semibold text-gray-900">Initial Payment Breakdown</h3>
+                                <button type="button" id="openBreakdownPopupBtn" class="rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50">Expand</button>
+                            </div>
+                            <div class="relative w-full h-56"><canvas id="breakdownChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <h3 class="font-semibold text-gray-900">Amortization Schedule</h3>
+                            <button type="button" id="openAmortizationPopupBtn" class="rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50">Expand</button>
+                        </div>
+                        <div class="overflow-x-auto max-h-96">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50 sticky top-0 shadow-sm z-10">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Year</th>
+                                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Interest</th>
+                                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Principal</th>
+                                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="amortizationBody" class="bg-white divide-y divide-gray-200 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="content-afford" class="tab-content">
+             <div class="max-w-5xl mx-auto space-y-8">
+                <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
+                    <div class="flex justify-end mb-4">
+                        <div class="w-full md:w-52 text-left">
+                            <label class="block text-xs font-medium text-gray-500 uppercase">Mode</label>
+                            <select id="affordMode" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white">
+                                <option value="simple">Simple</option>
+                                <option value="expert">Expert</option>
+                            </select>
+                        </div>
+                    </div>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-8">How much house can I afford?</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+                        <div><label class="block text-xs font-medium text-gray-500 uppercase">Annual Income</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="affordIncome" value="95,000" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-3 pl-7 pr-3"></div></div>
+                        <div><label class="block text-xs font-medium text-gray-500 uppercase">Monthly Debts</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="affordDebts" value="500" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-3 pl-7 pr-3"></div></div>
+                        <div><label class="block text-xs font-medium text-gray-500 uppercase">Down Payment</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="affordDown" value="40,000" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-3 pl-7 pr-3"></div></div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left mt-6">
+                        <div><label class="block text-xs font-medium text-gray-500 uppercase">Interest Rate (%)</label><input type="number" min="0" id="affordRate" value="6.5" step="0.1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-3 px-3"></div>
+                        <div><label class="block text-xs font-medium text-gray-500 uppercase" title="Tax/Ins/HOA means estimated monthly property tax, homeowners insurance, and HOA dues.">Est. Tax/Ins/HOA (Mo)</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="affordFixed" value="450" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-3 pl-7 pr-3"></div></div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-left mt-6 afford-expert">
+                        <div><label class="block text-xs font-medium text-gray-500 uppercase" title="Front-end DTI is housing costs divided by gross monthly income.">Front-End DTI (%)</label><input type="number" min="0" max="100" id="affordFrontDti" value="28" step="0.1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-3 px-3"></div>
+                        <div><label class="block text-xs font-medium text-gray-500 uppercase" title="Back-end DTI is total monthly debts (housing + other debts) divided by gross monthly income.">Back-End DTI (%)</label><input type="number" min="0" max="100" id="affordBackDti" value="36" step="0.1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-3 px-3"></div>
+                        <div><label class="block text-xs font-medium text-gray-500 uppercase">Stress-Test Rate (%)</label><input type="number" min="0" id="affordStressRate" value="8" step="0.1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-3 px-3"></div>
+                    </div>
+                </div>
+                <div id="affordResult" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+                    <div class="bg-emerald-50 p-8 rounded-2xl border border-emerald-100 text-center">
+                        <p class="text-emerald-800 font-bold uppercase tracking-wide text-xs mb-2">Maximum Home Price</p>
+                        <p id="maxHomePrice" class="text-4xl font-extrabold text-emerald-700">$0</p>
+                        <p id="affordConstraint" class="mt-3 text-sm font-medium text-emerald-800"></p>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center">
+                        <div class="relative w-full max-w-[300px] h-48"><canvas id="affordChart"></canvas></div>
+                    </div>
+                </div>
+                <div id="affordWarnings" class="hidden p-4 rounded-xl border text-sm afford-expert"></div>
+            </div>
+        </div>
+        
+        <div id="content-rentbuy" class="tab-content">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div class="lg:col-span-4 space-y-6">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                        <div class="flex justify-end">
+                            <div class="w-full text-left">
+                                <label class="text-xs font-medium text-gray-500 uppercase">Mode</label>
+                                <select id="rbMode" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white">
+                                    <option value="simple">Simple</option>
+                                    <option value="expert">Expert</option>
+                                </select>
+                            </div>
+                        </div>
+                        <h2 class="text-lg font-semibold text-gray-900">Variables</h2>
+                        <div><label class="text-xs font-medium text-gray-500 uppercase">Target Home Price</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="rbPrice" value="400,000" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                        <div><label class="text-xs font-medium text-gray-500 uppercase">Monthly Rent</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="rbRent" value="2,800" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Appreciation %</label><input type="number" min="0" id="rbApprec" value="3" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3"></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Rent Infl. %</label><input type="number" min="0" id="rbRentInf" value="4" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3"></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Maint % (Yr)</label><input type="number" min="0" id="rbMaint" value="1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3"></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Buy Clos. Cost %</label><input type="number" min="0" id="rbClosing" value="3" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3"></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 rb-expert">
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Inv. Return %</label><input type="number" id="rbInvestReturn" value="6" step="0.1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3"></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Tax Treatment</label><select id="rbTaxTreatment" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white"><option value="none">No Tax Benefit</option><option value="interest">Mortgage Interest Only</option><option value="itemized">Itemized (Interest + Tax)</option></select></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 rb-expert">
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Marginal Tax %</label><input type="number" min="0" max="60" id="rbMarginalTax" value="24" step="0.1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3"></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Std Deduction (Yr)</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="rbStdDeduction" value="15,000" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="lg:col-span-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col">
+                    <div class="mb-4">
+                        <h3 class="text-lg font-bold text-gray-900">10-Year Cumulative Net Cost</h3>
+                    </div>
+                    <div class="relative w-full h-72"><canvas id="rentBuyChart"></canvas></div>
+                    <div id="rbWarnings" class="hidden mt-4 p-4 rounded-xl border text-sm rb-expert"></div>
+                    <div id="rbVerdict" class="mt-6 p-4 rounded-xl text-center text-lg"></div>
+                    <div class="mt-6 rb-expert">
+                        <h4 class="text-sm font-semibold text-gray-900 mb-2">Scenario Break-Even (Best / Base / Worst)</h4>
+                        <div class="overflow-x-auto border border-gray-200 rounded-xl">
+                            <table class="min-w-full text-sm">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left text-xs uppercase text-gray-500">Scenario</th>
+                                        <th class="px-4 py-2 text-left text-xs uppercase text-gray-500">Break-Even</th>
+                                        <th class="px-4 py-2 text-left text-xs uppercase text-gray-500">10y Advantage</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rbScenarioBody" class="divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="content-refinance" class="tab-content">
+            <div class="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div class="lg:col-span-4 space-y-6">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                        <h2 class="text-lg font-bold text-gray-900 border-b pb-2">Current Loan</h2>
+                        <div><label class="text-xs font-medium text-gray-500 uppercase">Remaining Balance</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="refiBal" value="300,000" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                        <div><label class="text-xs font-medium text-gray-500 uppercase">Current Rate (%)</label><input type="number" min="0" id="refiRateOld" value="7.5" step="0.1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3"></div>
+                        <div><label class="text-xs font-medium text-gray-500 uppercase" title="P&I means principal and interest payment, excluding tax, insurance, and HOA.">Current P&I</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="refiPayOld" value="2,097" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                    </div>
+                    <div class="bg-purple-50 p-6 rounded-2xl shadow-sm border border-purple-100 space-y-4">
+                        <h2 class="text-lg font-bold text-purple-900 border-b border-purple-200 pb-2">New Loan</h2>
+                        <div><label class="text-xs font-medium text-purple-800 uppercase">New Rate (%)</label><input type="number" min="0" id="refiRateNew" value="5.5" step="0.1" class="w-full mt-1 border-purple-200 rounded-lg shadow-sm border py-2 px-3"></div>
+                        <div><label class="text-xs font-medium text-purple-800 uppercase">New Term (Years)</label><input type="number" min="1" id="refiTermNew" value="30" class="w-full mt-1 border-purple-200 rounded-lg shadow-sm border py-2 px-3"></div>
+                        <div><label class="text-xs font-medium text-purple-800 uppercase">Refi Closing Costs</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-purple-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="refiCost" value="5,000" class="w-full mt-1 border-purple-200 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                    </div>
+                </div>
+                <div class="lg:col-span-8 flex flex-col space-y-6">
+                    <div id="refiResult" class="bg-white p-6 rounded-2xl border border-gray-200 text-center shadow-sm">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">
+                            <div><p class="text-xs font-bold text-gray-500 uppercase">New Payment</p><p id="refiNewPay" class="text-3xl font-bold text-purple-600">$0</p></div>
+                            <div><p class="text-xs font-bold text-gray-500 uppercase">Monthly Savings</p><p id="refiSaveMo" class="text-3xl font-bold text-emerald-600">$0</p></div>
+                            <div><p class="text-xs font-bold text-gray-500 uppercase">Break-Even Point</p><p id="refiBreak" class="text-3xl font-bold text-gray-900">0 Mo</p></div>
+                            <div><p class="text-xs font-bold text-gray-500 uppercase">Current Term Left</p><p id="refiOldTermLeft" class="text-3xl font-bold text-gray-900">0 Mo</p></div>
+                        </div>
+                        <p id="refiAdvice" class="text-gray-600 text-sm font-medium border-t pt-4"></p>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex-grow">
+                        <h3 class="text-sm font-semibold text-gray-900 mb-4">Cumulative Remaining Cost</h3>
+                        <div class="relative h-64 w-full"><canvas id="refiChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="breakdownPopup" class="hidden fixed inset-0 z-[70] items-center justify-center bg-black/50 p-4" aria-hidden="true">
+        <div class="w-full max-w-4xl max-h-[90vh] rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                <h3 class="font-semibold text-gray-900">Initial Payment Breakdown - Full Details</h3>
+                <button type="button" id="closeBreakdownPopupBtn" class="rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-100">Close</button>
+            </div>
+            <div class="p-6 space-y-5 overflow-y-auto max-h-[calc(90vh-4.5rem)]">
+                <div class="relative w-full h-80"><canvas id="breakdownPopupChart"></canvas></div>
+                <div id="breakdownPopupDetails" class="space-y-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="amortizationPopup" class="hidden fixed inset-0 z-[70] items-center justify-center bg-black/50 p-4" aria-hidden="true">
+        <div class="w-full max-w-6xl max-h-[90vh] rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                <h3 class="font-semibold text-gray-900">Amortization Schedule - Full Details</h3>
+                <button type="button" id="closeAmortizationPopupBtn" class="rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-100">Close</button>
+            </div>
+            <div class="overflow-auto max-h-[calc(90vh-4.5rem)]">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50 sticky top-0 shadow-sm z-10">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Period</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Approx Month</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Year</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Interest</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Principal</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">PMI/MIP</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Payment</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody id="amortizationPopupBody" class="bg-white divide-y divide-gray-200 text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="fixed bottom-0 left-0 w-full bg-white shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.1)] p-4 md:hidden z-50 flex justify-between items-center border-t border-gray-200">
+        <div>
+            <p class="text-xs font-bold text-gray-500 uppercase">Total Monthly</p>
+            <p id="mobileStickyMonthly" class="text-xl font-bold text-indigo-600">$0</p>
+        </div>
+        <button id="mobileEditInputsBtn" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">Top</button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

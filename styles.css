@@ -1,0 +1,37 @@
+body { font-family: 'Inter', sans-serif; padding-bottom: 80px; }
+
+@media (min-width: 768px) {
+    body { padding-bottom: 0; }
+}
+
+.tab-btn.active {
+    border-bottom: 2px solid #4f46e5;
+    color: #4f46e5;
+    font-weight: 600;
+}
+
+.tab-btn { color: #6b7280; font-weight: 500; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.toggle-checkbox:checked { right: 0; border-color: #4f46e5; }
+.toggle-checkbox:checked + .toggle-label { background-color: #4f46e5; }
+label[title] { cursor: help; border-bottom: 1px dotted #9ca3af; }
+
+.metric-value {
+    font-size: clamp(1.45rem, 2.2vw, 2.05rem);
+    font-weight: 700;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+body.afford-simple .afford-expert,
+body.rb-simple .rb-expert {
+    display: none !important;
+}
+
+@media print {
+    .no-print { display: none !important; }
+    .print-full { width: 100% !important; grid-column: span 12 !important; }
+    body { padding-bottom: 0; }
+}
