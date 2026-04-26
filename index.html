@@ -19,7 +19,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-                <h1 class="text-xl font-bold tracking-tight text-gray-900">MortgagePro <span class="text-indigo-600 font-normal">Suite</span></h1>
+                <h1 class="text-xl font-bold tracking-tight text-gray-900">Mortgage <span class="text-indigo-600 font-normal">Suite</span></h1>
             </div>
         </div>
 
@@ -181,15 +181,26 @@
 
                         <div class="rounded-xl border border-gray-200 overflow-hidden">
                             <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                                <p class="text-xs font-bold text-gray-700 uppercase">In 5 Years Snapshot</p>
+                                <p class="text-xs font-bold text-gray-700 uppercase">Milestone Snapshot (Years 1, 5, 10, 15, 20, 25, 30)</p>
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-4 text-sm">
-                                <div><p class="text-[11px] uppercase text-gray-500">Total Paid</p><p id="fiveYearTotalPaid" class="font-semibold text-gray-900">$0</p></div>
-                                <div><p class="text-[11px] uppercase text-gray-500">Principal Paid</p><p id="fiveYearPrincipalPaid" class="font-semibold text-gray-900">$0</p></div>
-                                <div><p class="text-[11px] uppercase text-gray-500">Interest Paid</p><p id="fiveYearInterestPaid" class="font-semibold text-gray-900">$0</p></div>
-                                <div><p class="text-[11px] uppercase text-gray-500">MI Paid</p><p id="fiveYearMipPaid" class="font-semibold text-gray-900">$0</p></div>
-                                <div><p class="text-[11px] uppercase text-gray-500">Remaining Balance</p><p id="fiveYearBalance" class="font-semibold text-gray-900">$0</p></div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">Year</th>
+                                            <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">Total Paid</th>
+                                            <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">Principal Paid</th>
+                                            <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">Interest Paid</th>
+                                            <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">MI Paid</th>
+                                            <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">Remaining Balance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="milestoneSnapshotBody" class="bg-white divide-y divide-gray-200">
+                                        <tr><td class="px-4 py-2 text-gray-500 text-sm" colspan="6">No schedule available.</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
+                            <p id="milestoneSnapshotNote" class="px-4 py-3 text-[11px] text-gray-500 border-t border-gray-100"></p>
                         </div>
 
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -319,7 +330,7 @@
                     <div id="assumptionWarnings" class="hidden p-4 rounded-xl border text-sm"></div>
 
                     <details class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" id="cashBreakdownDetails">
-                        <summary class="px-6 py-4 cursor-pointer text-sm font-semibold text-gray-900 bg-gray-50 select-none">Cash to Close Breakdown</summary>
+                        <summary class="px-6 py-4 cursor-pointer text-sm font-semibold text-gray-900 bg-gray-50 select-none">Detailed Cash-to-Close Line Items</summary>
                         <div class="p-6">
                             <div id="cashToCloseBreakdown" class="space-y-2 text-sm text-gray-700"></div>
                         </div>

@@ -178,6 +178,25 @@
             }
         };
 
+        const fetchTextWithTimeout = async (url, timeoutMs = 12000, externalSignal = null) => {
+            guardExternalRequest(url);
+            const controller = new AbortController();
+            const onAbort = () => controller.abort();
+            if (externalSignal) {
+                if (externalSignal.aborted) controller.abort();
+                else externalSignal.addEventListener('abort', onAbort, { once: true });
+            }
+            const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const response = await fetch(url, { signal: controller.signal });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.text();
+            } finally {
+                clearTimeout(timeoutHandle);
+                if (externalSignal) externalSignal.removeEventListener('abort', onAbort);
+            }
+        };
+
         const scoreNameMatch = (normalizedTarget, normalizedCandidate) => {
             if (!normalizedTarget || !normalizedCandidate) return 0;
             if (normalizedTarget === normalizedCandidate) return 4;
@@ -1337,6 +1356,77 @@
             return { endRow: null, lastMiRow: periodRows[periodRows.length - 1], hadMi: true };
         };
 
+        const MILESTONE_SNAPSHOT_YEARS = [1, 5, 10, 15, 20, 25, 30];
+
+        const summarizeScheduleAtYears = ({ periodRows, periodsPerYear, years, startingBalance }) => {
+            const targetPeriods = Math.max(0, Math.round(years * periodsPerYear));
+            const cappedPeriods = Math.min(periodRows.length, targetPeriods);
+            const selectedRows = periodRows.slice(0, cappedPeriods);
+            if (!selectedRows.length) {
+                return {
+                    totalPaid: 0,
+                    principalPaid: 0,
+                    interestPaid: 0,
+                    miPaid: 0,
+                    balance: startingBalance
+                };
+            }
+
+            return {
+                totalPaid: selectedRows.reduce((sum, row) => sum + row.payment, 0),
+                principalPaid: selectedRows.reduce((sum, row) => sum + row.principal, 0),
+                interestPaid: selectedRows.reduce((sum, row) => sum + row.interest, 0),
+                miPaid: selectedRows.reduce((sum, row) => sum + row.pmi, 0),
+                balance: selectedRows[selectedRows.length - 1].balance
+            };
+        };
+
+        const renderMilestoneSnapshotTable = ({ periodRows, periodsPerYear, termMonths, startingBalance, payoffPeriod }) => {
+            const bodyEl = document.getElementById('milestoneSnapshotBody');
+            const noteEl = document.getElementById('milestoneSnapshotNote');
+            if (!bodyEl) return;
+
+            bodyEl.replaceChildren();
+            MILESTONE_SNAPSHOT_YEARS.forEach((years) => {
+                const summary = summarizeScheduleAtYears({
+                    periodRows,
+                    periodsPerYear,
+                    years,
+                    startingBalance
+                });
+                const tr = document.createElement('tr');
+                [
+                    `Yr ${years}`,
+                    formatMoney(summary.totalPaid),
+                    formatMoney(summary.principalPaid),
+                    formatMoney(summary.interestPaid),
+                    formatMoney(summary.miPaid),
+                    formatMoney(summary.balance)
+                ].forEach((value, idx) => {
+                    const td = document.createElement('td');
+                    td.className = idx === 0
+                        ? 'px-4 py-2 font-medium text-gray-900'
+                        : 'px-4 py-2 text-gray-700';
+                    td.innerText = value;
+                    tr.appendChild(td);
+                });
+                bodyEl.appendChild(tr);
+            });
+
+            if (!noteEl) return;
+            const selectedTermYears = termMonths / 12;
+            const maxMilestoneYear = MILESTONE_SNAPSHOT_YEARS[MILESTONE_SNAPSHOT_YEARS.length - 1];
+            if (selectedTermYears < maxMilestoneYear) {
+                noteEl.innerText = `Selected loan term is ${selectedTermYears} years. Milestones beyond the payoff horizon show final payoff totals.`;
+                return;
+            }
+            if (Number.isFinite(payoffPeriod) && payoffPeriod > 0 && payoffPeriod < (maxMilestoneYear * periodsPerYear)) {
+                noteEl.innerText = `Loan pays off around ${toMonthStamp(payoffPeriod, periodsPerYear)}. Later milestones show final payoff totals.`;
+                return;
+            }
+            noteEl.innerText = 'Milestones are based on scheduled payments under current assumptions.';
+        };
+
         const renderMortgageInsights = ({
             schedule,
             loanProfile,
@@ -1381,21 +1471,13 @@
             const worstCaseMonthly = Math.max(totalMonthly, stressRateTotal, stressInsTotal, stressTaxTotal);
             setElText('phasePaymentWorst', formatMoney(worstCaseMonthly));
 
-            const periodsInFiveYears = Math.min(periodRows.length, Math.round(periodsPerYear * 5));
-            const firstFiveYears = periodRows.slice(0, periodsInFiveYears);
-            const paid5 = firstFiveYears.reduce((sum, row) => sum + row.payment, 0);
-            const principal5 = firstFiveYears.reduce((sum, row) => sum + row.principal, 0);
-            const interest5 = firstFiveYears.reduce((sum, row) => sum + row.interest, 0);
-            const pmi5 = firstFiveYears.reduce((sum, row) => sum + row.pmi, 0);
-            const balance5 = firstFiveYears.length
-                ? firstFiveYears[firstFiveYears.length - 1].balance
-                : loanProfile.noteLoanAmount;
-
-            setElText('fiveYearTotalPaid', formatMoney(paid5));
-            setElText('fiveYearPrincipalPaid', formatMoney(principal5));
-            setElText('fiveYearInterestPaid', formatMoney(interest5));
-            setElText('fiveYearMipPaid', formatMoney(pmi5));
-            setElText('fiveYearBalance', formatMoney(balance5));
+            renderMilestoneSnapshotTable({
+                periodRows,
+                periodsPerYear,
+                termMonths,
+                startingBalance: loanProfile.noteLoanAmount,
+                payoffPeriod: periodRows.length ? periodRows[periodRows.length - 1].period : 0
+            });
 
             const sellerCredits = 0;
             const lenderCredits = 0;
@@ -1699,7 +1781,6 @@
             breakdownRows.push({ label: 'Discount Points (Financed)', value: loanProfile.financedPoints });
             breakdownRows.push({ label: 'Lender + Other Costs (Upfront)', value: loanProfile.upfrontOtherCosts });
             breakdownRows.push({ label: 'Lender + Other Costs (Financed)', value: loanProfile.financedOtherCosts });
-            breakdownRows.push({ label: 'Total Cash To Close', value: loanProfile.upfrontCashToClose, emphasis: true });
             setCashToCloseBreakdown(breakdownRows);
 
             latestMortgageSchedule = schedule;
