@@ -1635,6 +1635,14 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 if (event.key === 'Escape') closeAllPopups();
             });
 
+            const snapPdfBtn = document.getElementById('snapPdfBtn');
+            if (snapPdfBtn) {
+                snapPdfBtn.addEventListener('click', () => {
+                    closeAllPopups();
+                    window.print();
+                });
+            }
+
             const coreInputs = [
                 'interestRate', 'loanTerm',
                 'propertyTax', 'homeInsurance', 'hoaFee', 'pmiRate', 'convPmiDropLtv',
