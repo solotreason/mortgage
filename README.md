@@ -17,6 +17,10 @@ This project is static HTML/CSS/JS. Open `index.html` in a browser.
 - `styles.css`: shared styling
 - `app.js`: UI orchestration and chart rendering
 - `src/core/mortgage-core.js`: reusable mortgage calculation engine (pure functions)
+- `src/ui/mortgage-ui.js`: mortgage calculator module
+- `src/ui/afford-ui.js`: affordability calculator module
+- `src/ui/rentbuy-ui.js`: rent-vs-buy calculator module
+- `src/ui/refinance-ui.js`: refinance calculator module
 
 ## Quality Checks
 

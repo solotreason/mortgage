@@ -1,12 +1,12 @@
 import {
     estimateAnnualMortgageInsuranceRate,
     computeMonthlyPayment,
-    computeLoanFromPayment,
-    solveRateFromPayment,
-    computeMortgageInsuranceForPeriod,
-    simulateMortgageSchedule,
-    simulateFixedPaymentLoan
+    computeMortgageInsuranceForPeriod
 } from './src/core/mortgage-core.js';
+import { createMortgageCalculator } from './src/ui/mortgage-ui.js';
+import { createAffordabilityCalculator } from './src/ui/afford-ui.js';
+import { createRentBuyCalculator } from './src/ui/rentbuy-ui.js';
+import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
 
 // --- UTILS ---
         const formatMoney = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number.isFinite(n) ? n : 0);
@@ -1461,420 +1461,90 @@ import {
                 : `Current annual income is ${formatMoney(Math.abs(annualGap))} above this comfort target.`;
         };
 
+        const mortgageUiState = {
+            get balanceChart() { return balanceChart; },
+            set balanceChart(value) { balanceChart = value; },
+            get breakdownChart() { return breakdownChart; },
+            set breakdownChart(value) { breakdownChart = value; },
+            get latestPaymentBreakdownRows() { return latestPaymentBreakdownRows; },
+            set latestPaymentBreakdownRows(value) { latestPaymentBreakdownRows = value; },
+            get latestMortgageSchedule() { return latestMortgageSchedule; },
+            set latestMortgageSchedule(value) { latestMortgageSchedule = value; }
+        };
+        const affordUiState = {
+            get affordChart() { return affordChart; },
+            set affordChart(value) { affordChart = value; }
+        };
+        const rentBuyUiState = {
+            get rentBuyChart() { return rentBuyChart; },
+            set rentBuyChart(value) { rentBuyChart = value; }
+        };
+        const refiUiState = {
+            get refiChart() { return refiChart; },
+            set refiChart(value) { refiChart = value; }
+        };
+
+        const mortgageCalculator = createMortgageCalculator({
+            state: mortgageUiState,
+            getVal,
+            getChecked,
+            getSelectVal,
+            getConventionalPmiThresholdPct,
+            buildLoanCostProfile,
+            formatMoney,
+            formatPercent,
+            setCashToCloseBreakdown,
+            renderMortgageInsights,
+            getBreakdownChartPayload,
+            isPopupOpen,
+            renderBreakdownPopupContent,
+            renderAmortizationPopupTable,
+            renderWarnings
+        });
+        const affordabilityCalculator = createAffordabilityCalculator({
+            state: affordUiState,
+            getVal,
+            getSelectVal,
+            clamp,
+            formatMoney,
+            formatPercent,
+            renderWarnings,
+            updateModeVisibility
+        });
+        const rentBuyCalculator = createRentBuyCalculator({
+            state: rentBuyUiState,
+            getVal,
+            getSelectVal,
+            clamp,
+            formatMoney,
+            formatPercent,
+            formatBreakEven,
+            renderWarnings,
+            updateModeVisibility,
+            getConventionalPmiThresholdPct,
+            runRentVsBuyScenario
+        });
+        const refinanceCalculator = createRefinanceCalculator({
+            state: refiUiState,
+            getVal,
+            formatMoney
+        });
+
         // --- CALCULATION LOGIC ---
         function calcMortgage() {
-            const homePrice = getVal('homePrice');
-            const downPayment = getVal('downPayment');
-            const annualRate = getVal('interestRate') / 100;
-            const termMonths = getVal('loanTerm') * 12;
-            const loanType = getSelectVal('loanType', 'conventional');
-            const taxMonthly = getVal('propertyTax') / 12;
-            const insuranceMonthly = getVal('homeInsurance') / 12;
-            const hoaMonthly = getVal('hoaFee');
-            const annualPmiRate = getVal('pmiRate') / 100;
-            const convPmiDropLtv = getConventionalPmiThresholdPct() / 100;
-            const extraMonthly = getVal('extraPayment');
-            const extraPaymentYears = getVal('extraPaymentYears');
-            const isBiWeekly = getChecked('biWeeklyToggle');
-            const lumpSumAmount = getVal('lumpSumAmount');
-            const lumpSumMonth = getVal('lumpSumMonth');
-            const recastEnabled = getChecked('recastToggle');
-            const recastFee = getVal('recastFee');
-
-            if (homePrice <= 0 || termMonths <= 0) return;
-
-            const loanProfile = buildLoanCostProfile({ homePrice, downPayment, loanType });
-            const originationLtv = homePrice > 0 ? (loanProfile.baseLoan / homePrice) : 1;
-
-            const schedule = simulateMortgageSchedule({
-                loanAmount: loanProfile.noteLoanAmount,
-                annualRate,
-                termMonths,
-                frequency: isBiWeekly ? 'biweekly' : 'monthly',
-                extraMonthly,
-                extraPaymentYears,
-                lumpSumAmount,
-                lumpSumMonth,
-                recastEnabled,
-                recastFee,
-                homePrice,
-                loanType,
-                annualPmiRate,
-                convPmiDropLtv,
-                originationLtv
-            });
-
-            const requiredMortgageMonthly = isBiWeekly
-                ? (schedule.initialPeriodicPayment * 26 / 12)
-                : schedule.initialPeriodicPayment;
-            const firstPeriodPmiMonthly = schedule.firstPeriodPmi * (schedule.periodsPerYear / 12);
-            const totalMonthly = requiredMortgageMonthly + firstPeriodPmiMonthly + taxMonthly + insuranceMonthly + hoaMonthly;
-
-            document.getElementById('totalMonthlyDisplay').innerText = formatMoney(totalMonthly);
-            document.getElementById('mobileStickyMonthly').innerText = formatMoney(totalMonthly);
-            document.getElementById('cashToCloseDisplay').innerText = formatMoney(loanProfile.upfrontCashToClose);
-            document.getElementById('totalInterestDisplay').innerText = formatMoney(schedule.totalInterest);
-
-            const noteMonthlyPayment = computeMonthlyPayment(loanProfile.noteLoanAmount, annualRate / 12, termMonths);
-            const aprMonthly = solveRateFromPayment(loanProfile.amountFinancedApr, noteMonthlyPayment, termMonths);
-            const aprNominalAnnual = aprMonthly * 12;
-            const aprEffectiveAnnual = Math.pow(1 + aprMonthly, 12) - 1;
-            const aprEl = document.getElementById('aprDisplay');
-            aprEl.innerText = `${(aprNominalAnnual * 100).toFixed(2)}%`;
-            aprEl.title = `Effective annual cost: ${(aprEffectiveAnnual * 100).toFixed(2)}%`;
-
-            const govtFeeLabel = loanType === 'fha' ? 'FHA UFMIP' : 'VA Funding Fee';
-            const breakdownRows = [
-                { label: 'Down Payment', value: loanProfile.effectiveDownPayment },
-                { label: 'Prepaids / Escrows', value: loanProfile.prepaidItems }
-            ];
-            if (loanProfile.govtFeeAmount > 0) {
-                breakdownRows.push({ label: `${govtFeeLabel} (Upfront)`, value: loanProfile.upfrontGovtFee });
-                breakdownRows.push({ label: `${govtFeeLabel} (Financed)`, value: loanProfile.financedGovtFee });
-            }
-            breakdownRows.push({ label: 'Discount Points (Upfront)', value: loanProfile.upfrontPoints });
-            breakdownRows.push({ label: 'Discount Points (Financed)', value: loanProfile.financedPoints });
-            breakdownRows.push({ label: 'Lender + Other Costs (Upfront)', value: loanProfile.upfrontOtherCosts });
-            breakdownRows.push({ label: 'Lender + Other Costs (Financed)', value: loanProfile.financedOtherCosts });
-            setCashToCloseBreakdown(breakdownRows);
-
-            latestMortgageSchedule = schedule;
-            latestPaymentBreakdownRows = [
-                { label: 'P&I', value: requiredMortgageMonthly },
-                { label: 'Tax', value: taxMonthly },
-                { label: 'Insurance', value: insuranceMonthly },
-                { label: 'HOA', value: hoaMonthly }
-            ];
-            if (firstPeriodPmiMonthly > 0) latestPaymentBreakdownRows.push({ label: 'PMI/MIP', value: firstPeriodPmiMonthly });
-
-            renderMortgageInsights({
-                schedule,
-                loanProfile,
-                loanType,
-                homePrice,
-                annualRate,
-                termMonths,
-                isBiWeekly,
-                requiredMortgageMonthly,
-                firstPeriodPmiMonthly,
-                taxMonthly,
-                insuranceMonthly,
-                hoaMonthly,
-                totalMonthly
-            });
-
-            const tbody = document.getElementById('amortizationBody');
-            tbody.replaceChildren();
-            schedule.yearRows.forEach((row) => {
-                const tr = document.createElement('tr');
-                [
-                    `Yr ${row.year}`,
-                    formatMoney(row.interest),
-                    formatMoney(row.principal),
-                    formatMoney(row.balance)
-                ].forEach((value) => {
-                    const td = document.createElement('td');
-                    td.className = 'px-6 py-2';
-                    td.innerText = value;
-                    tr.appendChild(td);
-                });
-                tbody.appendChild(tr);
-            });
-
-            if (typeof Chart !== 'undefined') {
-                try {
-                    if (balanceChart) balanceChart.destroy();
-                    balanceChart = new Chart(document.getElementById('balanceChart'), {
-                        type: 'line',
-                        data: {
-                            labels: schedule.yearRows.map(row => `Yr ${row.year}`),
-                            datasets: [{ label: 'Balance', data: schedule.yearEndBalances, borderColor: '#4f46e5', fill: true, backgroundColor: 'rgba(79, 70, 229, 0.1)', tension: 0.4, pointRadius: 0 }]
-                        },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
-                    });
-
-                    if (breakdownChart) breakdownChart.destroy();
-                    const payload = getBreakdownChartPayload();
-                    breakdownChart = new Chart(document.getElementById('breakdownChart'), {
-                        type: 'doughnut',
-                        data: { labels: payload.labels, datasets: [{ data: payload.data, backgroundColor: payload.colors }] },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-                    });
-                } catch (e) {
-                    console.error('Chart error:', e);
-                }
-            }
-
-            if (isPopupOpen('breakdownPopup')) renderBreakdownPopupContent();
-            if (isPopupOpen('amortizationPopup')) renderAmortizationPopupTable();
-
-            const warnings = [];
-            const annualTaxRate = homePrice > 0 ? (getVal('propertyTax') / homePrice) : 0;
-            const annualInsRate = homePrice > 0 ? (getVal('homeInsurance') / homePrice) : 0;
-            if (downPayment > homePrice) warnings.push('Down payment exceeds home price; values are clamped to valid bounds.');
-            if (annualTaxRate > 0 && (annualTaxRate < 0.002 || annualTaxRate > 0.04)) warnings.push(`Property tax rate (${formatPercent(annualTaxRate)}) looks outside typical ranges.`);
-            if (annualInsRate > 0 && (annualInsRate < 0.001 || annualInsRate > 0.02)) warnings.push(`Insurance rate (${formatPercent(annualInsRate)}) looks outside typical ranges.`);
-            if (annualRate > 0.12) warnings.push('Interest rate is very high. Confirm rate/points assumptions.');
-            if (loanProfile.baseLoan <= loanProfile.upfrontFinanceCharges) warnings.push('Upfront finance charges are very high relative to loan amount; APR may be distorted.');
-            if (recastEnabled && lumpSumAmount <= 0) warnings.push('Recast is enabled, but no lump-sum payment is scheduled.');
-            if (isBiWeekly) warnings.push('Bi-weekly mode is modeled as 26 half-payments per year.');
-            if (schedule.recastApplied) {
-                const recastMonthApprox = Math.round(schedule.recastPeriod * (12 / schedule.periodsPerYear));
-                const newPaymentMonthly = isBiWeekly ? (schedule.finalPeriodicPayment * 26 / 12) : schedule.finalPeriodicPayment;
-                warnings.push(`Recast applied near month ${recastMonthApprox}; new scheduled payment is ${formatMoney(newPaymentMonthly)}.`);
-            }
-            renderWarnings('assumptionWarnings', warnings);
+            mortgageCalculator.calcMortgage();
         }
 
         function calcAffordability() {
-            updateModeVisibility();
-            const mode = getSelectVal('affordMode', 'simple');
-            const isExpert = mode === 'expert';
-            const income = getVal('affordIncome') / 12;
-            const debts = getVal('affordDebts');
-            const down = getVal('affordDown');
-            const fixed = getVal('affordFixed');
-            const noteAnnualRate = getVal('affordRate') / 100;
-            const stressAnnualRate = isExpert ? (getVal('affordStressRate') / 100) : noteAnnualRate;
-            const frontDti = isExpert ? clamp(getVal('affordFrontDti') / 100, 0, 1) : 0.28;
-            const backDti = isExpert ? clamp(getVal('affordBackDti') / 100, 0, 1) : 0.36;
-            const termMonths = (getVal('loanTerm') || 30) * 12;
-
-            const qualifyingAnnualRate = Math.max(noteAnnualRate, stressAnnualRate);
-            const qualifyingMonthlyRate = qualifyingAnnualRate / 12;
-
-            const frontMaxPI = (income * frontDti) - fixed;
-            const backMaxPI = (income * backDti) - debts - fixed;
-            const maxPI = Math.max(0, Math.min(frontMaxPI, backMaxPI));
-            const maxLoan = computeLoanFromPayment(maxPI, qualifyingMonthlyRate, termMonths);
-            const maxPrice = maxLoan + down;
-
-            document.getElementById('maxHomePrice').innerText = formatMoney(maxPrice);
-            let limitingRule = 'Front and back DTI are equally binding.';
-            if (frontMaxPI < backMaxPI) limitingRule = 'Front-end DTI is binding.';
-            if (backMaxPI < frontMaxPI) limitingRule = 'Back-end DTI is binding.';
-            if (maxPI <= 0) limitingRule = 'No qualifying payment room under current assumptions.';
-            document.getElementById('affordConstraint').innerText = `Qualifying rate: ${formatPercent(qualifyingAnnualRate)}. ${limitingRule}`;
-
-            if (typeof Chart !== 'undefined') {
-                try {
-                    if (affordChart) affordChart.destroy();
-                    const housingCost = clamp(maxPI + fixed, 0, income);
-                    const debtCost = clamp(debts, 0, Math.max(0, income - housingCost));
-                    const remaining = Math.max(0, income - housingCost - debtCost);
-                    affordChart = new Chart(document.getElementById('affordChart'), {
-                        type: 'pie',
-                        data: {
-                            labels: ['Housing', 'Debts', 'Remaining'],
-                            datasets: [{ data: [housingCost, debtCost, remaining], backgroundColor: ['#10b981', '#f43f5e', '#e5e7eb'] }]
-                        },
-                        options: { responsive: true, maintainAspectRatio: false }
-                    });
-                } catch (e) {
-                    console.error('Afford chart error:', e);
-                }
-            }
-
-            const warnings = [];
-            if (isExpert && frontDti > backDti) warnings.push('Front-end DTI is above back-end DTI; this is uncommon underwriting policy.');
-            if (isExpert && qualifyingAnnualRate >= 0.10) warnings.push('Stress-test rate is very high; affordability may be intentionally conservative.');
-            if (maxPI <= 0) warnings.push('Housing budget is negative or zero after debts/fixed costs.');
-            renderWarnings('affordWarnings', warnings);
+            affordabilityCalculator.calcAffordability();
         }
 
         function calcRentVsBuy() {
-            updateModeVisibility();
-            const mode = getSelectVal('rbMode', 'simple');
-            const isExpert = mode === 'expert';
-            const price = getVal('rbPrice');
-            const monthlyRentStart = getVal('rbRent');
-            const appreciation = getVal('rbApprec') / 100;
-            const rentInflation = getVal('rbRentInf') / 100;
-            const maintenanceRate = getVal('rbMaint') / 100;
-            const buyClosingRate = getVal('rbClosing') / 100;
-            const opportunityAnnualReturn = isExpert ? (getVal('rbInvestReturn') / 100) : 0;
-            const taxTreatment = isExpert ? getSelectVal('rbTaxTreatment', 'none') : 'none';
-            const marginalTaxRate = isExpert ? (getVal('rbMarginalTax') / 100) : 0;
-            const standardDeduction = isExpert ? getVal('rbStdDeduction') : 0;
-
-            if (price <= 0 || monthlyRentStart <= 0) return;
-
-            const referenceHomePrice = getVal('homePrice');
-            const downPct = clamp((getVal('downPaymentPercent') / 100) || 0.20, 0, 0.95);
-            const annualRate = (getVal('interestRate') / 100) || 0.065;
-            const termMonths = (getVal('loanTerm') || 30) * 12;
-            const annualPmiRate = getVal('pmiRate') / 100;
-            const convPmiDropLtv = getConventionalPmiThresholdPct() / 100;
-            const loanType = getSelectVal('loanType', 'conventional');
-            const taxRate = referenceHomePrice > 0 ? (getVal('propertyTax') / referenceHomePrice) : 0.015;
-            const insuranceRate = referenceHomePrice > 0 ? (getVal('homeInsurance') / referenceHomePrice) : 0.01;
-            const hoaMonthly = getVal('hoaFee');
-            const baseParams = {
-                price,
-                monthlyRentStart,
-                appreciation,
-                rentInflation,
-                maintenanceRate,
-                buyClosingRate,
-                opportunityAnnualReturn,
-                taxTreatment,
-                marginalTaxRate,
-                standardDeduction,
-                downPct,
-                annualRate,
-                termMonths,
-                annualPmiRate,
-                convPmiDropLtv,
-                loanType,
-                taxRate,
-                insuranceRate,
-                hoaMonthly,
-                saleCostRate: 0.06
-            };
-
-            const baseResult = runRentVsBuyScenario(baseParams);
-
-            if (typeof Chart !== 'undefined') {
-                try {
-                    if (rentBuyChart) rentBuyChart.destroy();
-                    rentBuyChart = new Chart(document.getElementById('rentBuyChart'), {
-                        type: 'line',
-                        data: {
-                            labels: Array.from({ length: 10 }, (_, index) => `Yr ${index + 1}`),
-                            datasets: [
-                                { label: 'Rent Net Cost (with invested savings)', data: baseResult.rentData, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', fill: true, tension: 0.3 },
-                                { label: 'Buy Net Cost (equity + tax adjusted)', data: baseResult.buyData, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.3 }
-                            ]
-                        },
-                        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false } }
-                    });
-                } catch (e) {
-                    console.error('RentBuy chart error:', e);
-                }
-            }
-
-            const finalAdvantage = baseResult.finalRentCost - baseResult.finalBuyCost;
-            const verdict = document.getElementById('rbVerdict');
-            if (finalAdvantage > 0) {
-                verdict.innerText = `Buying is better by ${formatMoney(finalAdvantage)} over 10 years. ${formatBreakEven(baseResult.breakEvenMonth)}.`;
-                verdict.className = 'mt-6 p-4 bg-emerald-50 text-emerald-800 rounded-xl font-bold border border-emerald-200';
-            } else {
-                verdict.innerText = `Renting is better by ${formatMoney(Math.abs(finalAdvantage))} over 10 years. ${formatBreakEven(baseResult.breakEvenMonth)}.`;
-                verdict.className = 'mt-6 p-4 bg-red-50 text-red-800 rounded-xl font-bold border border-red-200';
-            }
-
-            const scenarioBody = document.getElementById('rbScenarioBody');
-            scenarioBody.replaceChildren();
-
-            if (isExpert) {
-                const scenarioDefs = [
-                    { name: 'Best', appreciationDelta: 0.01, rentDelta: 0.01, rateDelta: -0.0075 },
-                    { name: 'Base', appreciationDelta: 0, rentDelta: 0, rateDelta: 0 },
-                    { name: 'Worst', appreciationDelta: -0.01, rentDelta: -0.01, rateDelta: 0.0075 }
-                ];
-                scenarioDefs.forEach((scenario) => {
-                    const scenarioParams = {
-                        ...baseParams,
-                        appreciation: clamp(baseParams.appreciation + scenario.appreciationDelta, -0.02, 0.15),
-                        rentInflation: clamp(baseParams.rentInflation + scenario.rentDelta, -0.02, 0.20),
-                        annualRate: Math.max(0, baseParams.annualRate + scenario.rateDelta)
-                    };
-                    const result = runRentVsBuyScenario(scenarioParams);
-                    const advantage = result.finalRentCost - result.finalBuyCost;
-                    const advantageText = advantage >= 0
-                        ? `Buy +${formatMoney(advantage)}`
-                        : `Rent +${formatMoney(Math.abs(advantage))}`;
-
-                    const tr = document.createElement('tr');
-                    const cells = [
-                        { value: scenario.name, className: 'px-4 py-2 font-medium text-gray-900' },
-                        { value: formatBreakEven(result.breakEvenMonth), className: 'px-4 py-2 text-gray-700' },
-                        { value: advantageText, className: 'px-4 py-2 text-gray-700' }
-                    ];
-                    cells.forEach((cell) => {
-                        const td = document.createElement('td');
-                        td.className = cell.className;
-                        td.innerText = cell.value;
-                        tr.appendChild(td);
-                    });
-                    scenarioBody.appendChild(tr);
-                });
-            }
-
-            const warnings = [];
-            if (isExpert && taxRate > 0 && (taxRate < 0.002 || taxRate > 0.04)) warnings.push(`Property tax rate (${formatPercent(taxRate)}) may be unrealistic for this market.`);
-            if (isExpert && insuranceRate > 0 && (insuranceRate < 0.001 || insuranceRate > 0.02)) warnings.push(`Insurance rate (${formatPercent(insuranceRate)}) may be unrealistic for this market.`);
-            if (isExpert && appreciation > 0.08) warnings.push('Home appreciation above 8% annually is aggressive for long-term planning.');
-            if (isExpert && rentInflation > 0.10) warnings.push('Rent inflation above 10% annually is aggressive for long-term planning.');
-            if (isExpert && (opportunityAnnualReturn > 0.15 || opportunityAnnualReturn < -0.05)) warnings.push('Investment return assumption is extreme; scenario sensitivity matters.');
-            if (baseResult.breakEvenMonth === null) warnings.push('Buying does not break even within 10 years under base assumptions.');
-            renderWarnings('rbWarnings', warnings);
+            rentBuyCalculator.calcRentVsBuy();
         }
 
         function calcRefinance() {
-            const balance = getVal('refiBal');
-            const oldPayment = getVal('refiPayOld');
-            const oldMonthlyRate = getVal('refiRateOld') / 100 / 12;
-            const newMonthlyRate = getVal('refiRateNew') / 100 / 12;
-            const newTermMonths = getVal('refiTermNew') * 12;
-            const closingCosts = getVal('refiCost');
-
-            if (balance <= 0 || oldPayment <= 0 || newTermMonths <= 0) return;
-
-            const remainingCurrent = simulateFixedPaymentLoan({ balance, monthlyRate: oldMonthlyRate, payment: oldPayment });
-            const newPayment = computeMonthlyPayment(balance, newMonthlyRate, newTermMonths);
-            const newLoan = simulateFixedPaymentLoan({ balance, monthlyRate: newMonthlyRate, payment: newPayment, maxMonths: newTermMonths + 2 });
-
-            document.getElementById('refiNewPay').innerText = formatMoney(newPayment);
-            document.getElementById('refiOldTermLeft').innerText = Number.isFinite(remainingCurrent.months) ? `${remainingCurrent.months} Mo` : 'N/A';
-
-            const monthlySavings = oldPayment - newPayment;
-            const hasFiniteCurrentTerm = Number.isFinite(remainingCurrent.months);
-            document.getElementById('refiSaveMo').innerText = formatMoney(monthlySavings);
-
-            if (!hasFiniteCurrentTerm) {
-                document.getElementById('refiBreak').innerText = 'N/A';
-                document.getElementById('refiAdvice').innerText = 'Current payment does not fully amortize the balance.';
-            } else if (monthlySavings > RATE_EPSILON) {
-                const monthsToBreakEven = closingCosts > 0 ? closingCosts / monthlySavings : 0;
-                document.getElementById('refiBreak').innerText = `${monthsToBreakEven.toFixed(1)} Mo`;
-                const totalDifference = remainingCurrent.totalPaid - (newLoan.totalPaid + closingCosts);
-
-                if (totalDifference > 0) {
-                    document.getElementById('refiAdvice').innerText = `Estimated lifetime savings: ${formatMoney(totalDifference)}. Refinancing favorable after ${monthsToBreakEven.toFixed(1)} months.`;
-                } else {
-                    document.getElementById('refiAdvice').innerText = `Payment drops, but total remaining cost is higher due to term/costs.`;
-                }
-            } else {
-                document.getElementById('refiBreak').innerText = 'N/A';
-                document.getElementById('refiAdvice').innerText = 'Payment increases. Usually only makes sense for cash-out or shorter terms.';
-            }
-
-            const chartLength = hasFiniteCurrentTerm ? Math.max(remainingCurrent.months, newLoan.months) : newLoan.months;
-            const oldData = [];
-            const newData = [];
-            for (let month = 0; month < chartLength; month += 1) {
-                if (hasFiniteCurrentTerm) oldData.push(remainingCurrent.cumulative[month] ?? remainingCurrent.totalPaid);
-                else oldData.push(oldPayment * (month + 1));
-                newData.push((newLoan.cumulative[month] ?? newLoan.totalPaid) + closingCosts);
-            }
-
-            if (typeof Chart !== 'undefined') {
-                try {
-                    if (refiChart) refiChart.destroy();
-                    refiChart = new Chart(document.getElementById('refiChart'), {
-                        type: 'line',
-                        data: {
-                            labels: Array.from({ length: chartLength }, (_, i) => `Mo ${i + 1}`),
-                            datasets: [
-                                { label: 'Current Loan', data: oldData, borderColor: '#9ca3af', borderDash: [5, 5], pointRadius: 0 },
-                                { label: 'Refi Cost', data: newData, borderColor: '#8b5cf6', fill: true, backgroundColor: 'rgba(139, 92, 246, 0.1)', pointRadius: 0 }
-                            ]
-                        },
-                        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false } }
-                    });
-                } catch(e) { console.error("Refi chart error:", e); }
-            }
+            refinanceCalculator.calcRefinance();
         }
 
         // --- UI & EVENT BINDING ---
