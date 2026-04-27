@@ -15,7 +15,17 @@ This project is static HTML/CSS/JS. Open `index.html` in a browser.
 
 - `index.html`: UI layout and inputs
 - `styles.css`: shared styling
-- `app.js`: calculator logic and charts
+- `app.js`: UI orchestration and chart rendering
+- `src/core/mortgage-core.js`: reusable mortgage calculation engine (pure functions)
+
+## Quality Checks
+
+- `npm run check`: syntax + static smoke checks
+- `npm run smoke`: static UI/entrypoint smoke checks
+- `npm run test`: unit tests for the core calculation module
+- `npm run ci`: full local CI pass (`check` + `test`)
+
+GitHub Actions runs `npm run ci` for every push and pull request.
 
 ## Notes
 

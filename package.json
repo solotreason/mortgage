@@ -1,5 +1,12 @@
 {
   "name": "mortgage",
   "version": "1.0.0",
-  "private": true
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check app.js && node --check src/core/mortgage-core.js && node --check scripts/smoke-static.mjs && node scripts/smoke-static.mjs",
+    "smoke": "node scripts/smoke-static.mjs",
+    "test": "node --test",
+    "ci": "npm run check && npm run test"
+  }
 }
