@@ -21,11 +21,18 @@
                 <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
                 <h1 class="text-xl font-bold tracking-tight text-gray-900">Mortgage <span class="text-indigo-600 font-normal">Suite</span></h1>
             </div>
-            <div class="no-print">
-                <button type="button" id="snapPdfBtn" class="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors sm:text-sm" title="Open print dialog to save this page as a PDF">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3h6l2 2h2a2 2 0 012 2v4h-3v4H6v-4H3V7a2 2 0 012-2h2l2-2z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 15h8v6H8z"></path></svg>
-                    <span>Snap to PDF</span>
-                </button>
+            <div class="no-print flex flex-col items-end gap-1">
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                    <button type="button" id="saveScenarioBtn" class="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 shadow-sm hover:bg-emerald-100 transition-colors sm:text-sm" title="Save current inputs to this browser">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h11l3 3v13H5V4z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 4v5h6V4"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 15h6"></path></svg>
+                        <span>Save Scenario</span>
+                    </button>
+                    <button type="button" id="loadScenarioBtn" class="inline-flex items-center gap-2 rounded-lg border border-sky-300 bg-sky-50 px-3.5 py-2 text-xs font-bold text-sky-800 shadow-sm hover:bg-sky-100 transition-colors sm:text-sm" title="Load last saved scenario from this browser">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 111.9 5.1"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v-4h4"></path></svg>
+                        <span>Load Scenario</span>
+                    </button>
+                </div>
+                <p id="scenarioStatus" class="text-[11px] font-medium text-gray-500"></p>
             </div>
         </div>
 
@@ -40,7 +47,6 @@
     </header>
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
         <div id="content-mortgage" class="tab-content active">
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 <div class="lg:col-span-4 space-y-6 no-print">
@@ -350,7 +356,7 @@
                         <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                             <div class="mb-4 flex items-center justify-between gap-3">
                                 <h3 class="text-sm font-semibold text-gray-900">Initial Payment Breakdown</h3>
-                                <button type="button" id="openBreakdownPopupBtn" class="rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50">Expand</button>
+                                <button type="button" id="openBreakdownPopupBtn" class="no-print rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50">Expand</button>
                             </div>
                             <div class="relative w-full h-56"><canvas id="breakdownChart"></canvas></div>
                         </div>
@@ -359,7 +365,7 @@
                     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                         <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                             <h3 class="font-semibold text-gray-900">Amortization Schedule</h3>
-                            <button type="button" id="openAmortizationPopupBtn" class="rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50">Expand</button>
+                            <button type="button" id="openAmortizationPopupBtn" class="no-print rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50">Expand</button>
                         </div>
                         <div class="overflow-x-auto max-h-96">
                             <table class="min-w-full divide-y divide-gray-200">
@@ -382,7 +388,7 @@
         <div id="content-afford" class="tab-content">
              <div class="max-w-5xl mx-auto space-y-8">
                 <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
-                    <div class="flex justify-end mb-4">
+                    <div class="no-print flex justify-end mb-4">
                         <div class="w-full md:w-52 text-left">
                             <label class="block text-xs font-medium text-gray-500 uppercase">Mode</label>
                             <select id="affordMode" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white">
@@ -425,7 +431,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 <div class="lg:col-span-4 space-y-6">
                     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                        <div class="flex justify-end">
+                        <div class="no-print flex justify-end">
                             <div class="w-full text-left">
                                 <label class="text-xs font-medium text-gray-500 uppercase">Mode</label>
                                 <select id="rbMode" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white">
@@ -517,6 +523,13 @@
 
     </main>
 
+    <footer class="print-only border-t border-gray-300 mt-6 pt-3 text-[11px] text-gray-700">
+        <p>
+            Generated for planning use only. Estimates are not loan offers or financial advice.
+            Printed: <span id="printGeneratedAt">Not generated</span>
+        </p>
+    </footer>
+
     <div id="breakdownPopup" class="hidden fixed inset-0 z-[70] items-center justify-center bg-black/50 p-4" aria-hidden="true">
         <div class="w-full max-w-4xl max-h-[90vh] rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
@@ -556,7 +569,7 @@
         </div>
     </div>
 
-    <div class="fixed bottom-0 left-0 w-full bg-white shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.1)] p-4 md:hidden z-50 flex justify-between items-center border-t border-gray-200">
+    <div class="fixed bottom-0 left-0 w-full bg-white shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.1)] p-4 md:hidden z-50 flex justify-between items-center border-t border-gray-200 no-print">
         <div>
             <p class="text-xs font-bold text-gray-500 uppercase">Total Monthly</p>
             <p id="mobileStickyMonthly" class="text-xl font-bold text-indigo-600">$0</p>

@@ -1553,10 +1553,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
             document.getElementById(`content-${tabId}`).classList.add('active');
             document.getElementById(`tab-${tabId}`).classList.add('active');
-            if (tabId === 'mortgage') calcMortgage();
-            if (tabId === 'afford') calcAffordability();
-            if (tabId === 'rentbuy') calcRentVsBuy();
-            if (tabId === 'refinance') calcRefinance();
+            runTabCalc(tabId);
         }
 
         const addInputChangeListener = (id, handler) => {
@@ -1572,6 +1569,163 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
         const runMortgageAndRentCalcs = () => {
             calcMortgage();
             calcRentVsBuy();
+        };
+        const SCENARIO_STORAGE_KEY = 'mortgageSuiteScenario.v1';
+        const SCENARIO_STATUS_BASE_CLASS = 'text-[11px] font-medium';
+        const PRINT_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit'
+        });
+        let printRestoreState = null;
+        let scenarioStatusTimeout = null;
+
+        const getActiveTabId = () => document.querySelector('.tab-btn.active')?.dataset?.tab ?? 'mortgage';
+        const isKnownTab = (tabId) => ['mortgage', 'afford', 'rentbuy', 'refinance'].includes(tabId);
+        const runTabCalc = (tabId) => {
+            if (tabId === 'mortgage') calcMortgage();
+            if (tabId === 'afford') calcAffordability();
+            if (tabId === 'rentbuy') calcRentVsBuy();
+            if (tabId === 'refinance') calcRefinance();
+        };
+
+        const setScenarioStatus = (message = '', tone = 'neutral') => {
+            const statusEl = document.getElementById('scenarioStatus');
+            if (!statusEl) return;
+            const toneClass = ({
+                neutral: 'text-gray-500',
+                success: 'text-emerald-700',
+                warning: 'text-amber-700',
+                error: 'text-rose-700'
+            })[tone] ?? 'text-gray-500';
+            statusEl.className = `${SCENARIO_STATUS_BASE_CLASS} ${toneClass}`;
+            statusEl.innerText = message;
+            if (scenarioStatusTimeout) clearTimeout(scenarioStatusTimeout);
+            if (message) {
+                scenarioStatusTimeout = setTimeout(() => {
+                    statusEl.innerText = '';
+                    statusEl.className = `${SCENARIO_STATUS_BASE_CLASS} text-gray-500`;
+                    scenarioStatusTimeout = null;
+                }, 4500);
+            }
+        };
+
+        const setPrintGeneratedTimestamp = (date = new Date()) => {
+            const generatedAtEl = document.getElementById('printGeneratedAt');
+            if (!generatedAtEl) return;
+            generatedAtEl.innerText = PRINT_TIMESTAMP_FORMATTER.format(date);
+        };
+
+        const collectScenarioPayload = () => {
+            const fields = {};
+            document.querySelectorAll('input[id], select[id], textarea[id]').forEach((el) => {
+                if (el.type === 'checkbox') {
+                    fields[el.id] = { type: 'checkbox', checked: Boolean(el.checked) };
+                    return;
+                }
+                fields[el.id] = { type: 'value', value: String(el.value ?? '') };
+            });
+            return {
+                version: 1,
+                savedAt: new Date().toISOString(),
+                activeTab: getActiveTabId(),
+                fields,
+                manualLocks: {
+                    tax: Boolean(locationEstimateState.manualLocks.tax),
+                    insurance: Boolean(locationEstimateState.manualLocks.insurance)
+                }
+            };
+        };
+
+        const applyScenarioPayload = (payload) => {
+            if (!payload || typeof payload !== 'object' || !payload.fields) return false;
+            Object.entries(payload.fields).forEach(([id, field]) => {
+                const el = document.getElementById(id);
+                if (!el || !field || typeof field !== 'object') return;
+                if (field.type === 'checkbox' && typeof field.checked !== 'undefined' && 'checked' in el) {
+                    el.checked = Boolean(field.checked);
+                    return;
+                }
+                if ('value' in field) {
+                    el.value = String(field.value ?? '');
+                }
+            });
+
+            if (payload.manualLocks && typeof payload.manualLocks === 'object') {
+                locationEstimateState.manualLocks.tax = Boolean(payload.manualLocks.tax);
+                locationEstimateState.manualLocks.insurance = Boolean(payload.manualLocks.insurance);
+            } else {
+                locationEstimateState.manualLocks.tax = false;
+                locationEstimateState.manualLocks.insurance = false;
+            }
+            setLocationManualLockHint();
+
+            updateModeVisibility();
+            updateConventionalPmiControls();
+
+            const targetTab = isKnownTab(payload.activeTab) ? payload.activeTab : 'mortgage';
+            switchTab(targetTab);
+            runCoreCalcs();
+            calcRefinance();
+            syncModalBodyLock();
+            return true;
+        };
+
+        const saveScenarioToStorage = () => {
+            try {
+                const payload = collectScenarioPayload();
+                window.localStorage.setItem(SCENARIO_STORAGE_KEY, JSON.stringify(payload));
+                setScenarioStatus(`Scenario saved (${PRINT_TIMESTAMP_FORMATTER.format(new Date(payload.savedAt))}).`, 'success');
+            } catch (error) {
+                setScenarioStatus('Could not save scenario in this browser.', 'error');
+            }
+        };
+
+        const loadScenarioFromStorage = () => {
+            try {
+                const raw = window.localStorage.getItem(SCENARIO_STORAGE_KEY);
+                if (!raw) {
+                    setScenarioStatus('No saved scenario found yet.', 'warning');
+                    return;
+                }
+                const parsed = JSON.parse(raw);
+                if (!applyScenarioPayload(parsed)) {
+                    setScenarioStatus('Saved scenario format is invalid.', 'error');
+                    return;
+                }
+                const savedAtLabel = parsed?.savedAt ? PRINT_TIMESTAMP_FORMATTER.format(new Date(parsed.savedAt)) : 'previous save';
+                setScenarioStatus(`Scenario loaded (${savedAtLabel}).`, 'success');
+            } catch (error) {
+                setScenarioStatus('Could not load saved scenario.', 'error');
+            }
+        };
+
+        const prepareForPrint = () => {
+            const cashBreakdownDetails = document.getElementById('cashBreakdownDetails');
+            if (!printRestoreState) {
+                printRestoreState = {
+                    scrollX: window.scrollX,
+                    scrollY: window.scrollY,
+                    cashBreakdownOpen: Boolean(cashBreakdownDetails?.open)
+                };
+            }
+            closeAllPopups();
+            if (cashBreakdownDetails) cashBreakdownDetails.open = true;
+            runCoreCalcs();
+            calcRefinance();
+            setPrintGeneratedTimestamp(new Date());
+            window.scrollTo(0, 0);
+        };
+
+        const restoreAfterPrint = () => {
+            if (!printRestoreState) return;
+            const cashBreakdownDetails = document.getElementById('cashBreakdownDetails');
+            if (cashBreakdownDetails) cashBreakdownDetails.open = Boolean(printRestoreState.cashBreakdownOpen);
+            window.scrollTo(printRestoreState.scrollX, printRestoreState.scrollY);
+            printRestoreState = null;
+            syncModalBodyLock();
         };
 
         function init() {
@@ -1635,13 +1789,22 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 if (event.key === 'Escape') closeAllPopups();
             });
 
-            const snapPdfBtn = document.getElementById('snapPdfBtn');
-            if (snapPdfBtn) {
-                snapPdfBtn.addEventListener('click', () => {
-                    closeAllPopups();
-                    window.print();
-                });
+            const saveScenarioBtn = document.getElementById('saveScenarioBtn');
+            if (saveScenarioBtn) {
+                saveScenarioBtn.addEventListener('click', saveScenarioToStorage);
             }
+
+            const loadScenarioBtn = document.getElementById('loadScenarioBtn');
+            if (loadScenarioBtn) {
+                loadScenarioBtn.addEventListener('click', loadScenarioFromStorage);
+            }
+
+            window.addEventListener('beforeprint', () => {
+                prepareForPrint();
+            });
+            window.addEventListener('afterprint', () => {
+                restoreAfterPrint();
+            });
 
             const coreInputs = [
                 'interestRate', 'loanTerm',
@@ -1750,6 +1913,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             syncModalBodyLock();
             runCoreCalcs();
             calcRefinance();
+            setPrintGeneratedTimestamp(new Date());
         }
 
         window.onload = init;

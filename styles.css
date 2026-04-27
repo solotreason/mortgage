@@ -30,8 +30,53 @@ body.rb-simple .rb-expert {
     display: none !important;
 }
 
+@page {
+    size: auto;
+    margin: 0.5in;
+}
+
+.print-only {
+    display: none;
+}
+
 @media print {
+    body {
+        padding-bottom: 0;
+        background: #fff;
+        color: #111827;
+        font-size: 11pt;
+        line-height: 1.35;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    main {
+        max-width: none !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    .print-only { display: block !important; }
     .no-print { display: none !important; }
     .print-full { width: 100% !important; grid-column: span 12 !important; }
-    body { padding-bottom: 0; }
+    .rounded-2xl,
+    .rounded-xl,
+    details,
+    table,
+    thead,
+    tbody,
+    tr,
+    canvas,
+    svg,
+    img {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    .overflow-x-auto,
+    .overflow-auto {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+    #cashBreakdownDetails > summary {
+        list-style: none;
+        pointer-events: none;
+    }
 }
