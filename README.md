@@ -6,10 +6,13 @@ A browser-based mortgage analysis tool with four calculators:
 - Affordability
 - Rent vs. buy (10-year net-cost model)
 - Refinance break-even and cost comparison
+- Header `Snap to PDF` action for print/save-to-PDF export
 
 ## Run
 
 This project is static HTML/CSS/JS. Open `index.html` in a browser.
+
+To export a report, click `Snap to PDF` in the top-right header and choose **Save to PDF** in your browser print dialog.
 
 ## Files
 
