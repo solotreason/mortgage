@@ -138,16 +138,6 @@ export const createMortgageCalculator = ({
 
         if (typeof Chart !== 'undefined') {
             try {
-                if (state.balanceChart) state.balanceChart.destroy();
-                state.balanceChart = new Chart(document.getElementById('balanceChart'), {
-                    type: 'line',
-                    data: {
-                        labels: schedule.yearRows.map(row => `Yr ${row.year}`),
-                        datasets: [{ label: 'Balance', data: schedule.yearEndBalances, borderColor: '#4f46e5', fill: true, backgroundColor: 'rgba(79, 70, 229, 0.1)', tension: 0.4, pointRadius: 0 }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
-                });
-
                 if (state.breakdownChart) state.breakdownChart.destroy();
                 const payload = getBreakdownChartPayload();
                 state.breakdownChart = new Chart(document.getElementById('breakdownChart'), {

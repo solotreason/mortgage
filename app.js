@@ -904,7 +904,6 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
         };
 
         // --- GLOBAL STATE ---
-        let balanceChart = null;
         let breakdownChart = null;
         let breakdownPopupChart = null;
         let affordChart = null;
@@ -1462,8 +1461,6 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
         };
 
         const mortgageUiState = {
-            get balanceChart() { return balanceChart; },
-            set balanceChart(value) { balanceChart = value; },
             get breakdownChart() { return breakdownChart; },
             set breakdownChart(value) { breakdownChart = value; },
             get latestPaymentBreakdownRows() { return latestPaymentBreakdownRows; },

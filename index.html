@@ -348,18 +348,12 @@
                         </div>
                     </details>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                            <h3 class="text-sm font-semibold text-gray-900 mb-4">Balance Timeline</h3>
-                            <div class="relative w-full h-56"><canvas id="balanceChart"></canvas></div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <div class="mb-4 flex items-center justify-between gap-3">
+                            <h3 class="text-sm font-semibold text-gray-900">Initial Payment Breakdown</h3>
+                            <button type="button" id="openBreakdownPopupBtn" class="no-print rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50">Expand</button>
                         </div>
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                            <div class="mb-4 flex items-center justify-between gap-3">
-                                <h3 class="text-sm font-semibold text-gray-900">Initial Payment Breakdown</h3>
-                                <button type="button" id="openBreakdownPopupBtn" class="no-print rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50">Expand</button>
-                            </div>
-                            <div class="relative w-full h-56"><canvas id="breakdownChart"></canvas></div>
-                        </div>
+                        <div class="relative w-full h-72 md:h-80"><canvas id="breakdownChart"></canvas></div>
                     </div>
 
                     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
