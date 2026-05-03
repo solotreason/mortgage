@@ -6,14 +6,13 @@ A browser-based mortgage analysis tool with four calculators:
 - Affordability
 - Rent vs. buy (10-year net-cost model)
 - Refinance break-even and cost comparison
-- Save/load scenario controls (browser local storage)
+- Header `Snap to PDF` action for print/save-to-PDF export
 
 ## Run
 
 This project is static HTML/CSS/JS. Open `index.html` in a browser.
 
-To export a report, use your browser print flow (`Ctrl+P` on Windows/Linux or `Cmd+P` on macOS) and choose **Save to PDF**.
-Use `Save Scenario` / `Load Scenario` in the header to preserve and restore all inputs before export.
+To export a report, click `Snap to PDF` in the top-right header and choose **Save to PDF** in your browser print dialog.
 
 ## Files
 
@@ -31,7 +30,6 @@ Use `Save Scenario` / `Load Scenario` in the header to preserve and restore all 
 - `npm run check`: syntax + static smoke checks
 - `npm run smoke`: static UI/entrypoint smoke checks
 - `npm run test`: unit tests for the core calculation module
-- `npm run test:print`: Playwright print regression test (Chromium)
 - `npm run ci`: full local CI pass (`check` + `test`)
 
 GitHub Actions runs `npm run ci` for every push and pull request.
