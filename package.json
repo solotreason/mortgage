@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check app.js && node --check src/core/mortgage-core.js && node --check src/ui/mortgage-ui.js && node --check src/ui/afford-ui.js && node --check src/ui/rentbuy-ui.js && node --check src/ui/refinance-ui.js && node --check scripts/smoke-static.mjs && node scripts/smoke-static.mjs",
+    "dev": "node scripts/dev-server.mjs",
+    "check": "node --check app.js && node --check src/core/mortgage-core.js && node --check src/ui/mortgage-ui.js && node --check src/ui/afford-ui.js && node --check src/ui/rentbuy-ui.js && node --check src/ui/refinance-ui.js && node --check scripts/dev-server.mjs && node --check scripts/smoke-static.mjs && node scripts/smoke-static.mjs",
     "smoke": "node scripts/smoke-static.mjs",
     "test": "node --test",
     "test:print": "playwright test tests/print-regression.spec.mjs --project=chromium",

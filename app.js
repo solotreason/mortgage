@@ -38,7 +38,16 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
         const SALT_CAP_ANNUAL = 10000;
         const DEFAULT_LOCATION_PROFILE = { label: 'U.S. Baseline', taxRate: 0.0110, insuranceRate: 0.0065 };
         const CITY_SEARCH_ENDPOINT = 'https://geocoding-api.open-meteo.com/v1/search';
-        const ACS_YEAR_CANDIDATES = [2024, 2023, 2022];
+        const ACS_YEAR_CANDIDATES = [2024];
+        const FRED_SERIES_BY_TERM = Object.freeze({
+            15: 'MORTGAGE15US',
+            30: 'MORTGAGE30US'
+        });
+        const LIVE_RATE_PROXY_ENDPOINT = '/api/live-rate';
+        const FRED_CSV_ENDPOINTS_BY_SERIES = (seriesId) => ([
+            `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(seriesId)}`,
+            `https://fred.stlouisfed.org/series/${encodeURIComponent(seriesId)}/downloaddata/${encodeURIComponent(seriesId)}.csv`
+        ]);
         const STAY_AFLOAT_POLICY_VERSION = 'Stay Afloat Policy v1';
         const LOCATION_QUALITY_META = {
             city: {
@@ -205,6 +214,72 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 clearTimeout(timeoutHandle);
                 if (externalSignal) externalSignal.removeEventListener('abort', onAbort);
             }
+        };
+
+        const resolveFredSeriesForTerm = (termYears) => {
+            const roundedTerm = Math.round(Number.isFinite(termYears) ? termYears : 30);
+            if (roundedTerm === 15) {
+                return {
+                    seriesId: FRED_SERIES_BY_TERM[15],
+                    exactMatch: true,
+                    requestedTerm: roundedTerm
+                };
+            }
+            return {
+                seriesId: FRED_SERIES_BY_TERM[30],
+                exactMatch: roundedTerm === 30,
+                requestedTerm: roundedTerm
+            };
+        };
+
+        const parseLatestObservationFromFredCsv = (csvText) => {
+            const lines = String(csvText ?? '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+            if (lines.length < 2) return null;
+            for (let i = lines.length - 1; i >= 1; i -= 1) {
+                const parts = lines[i].split(',');
+                if (parts.length < 2) continue;
+                const date = String(parts[0] ?? '').trim();
+                const rawValue = String(parts[1] ?? '').trim().replace(/^"|"$/g, '');
+                const rate = Number.parseFloat(rawValue);
+                if (!date || !Number.isFinite(rate)) continue;
+                return { date, rate };
+            }
+            return null;
+        };
+
+        const fetchLatestFreddieMacRate = async (termYears) => {
+            const seriesSelection = resolveFredSeriesForTerm(termYears);
+            try {
+                const payload = await fetchJsonWithTimeout(`${LIVE_RATE_PROXY_ENDPOINT}?series=${encodeURIComponent(seriesSelection.seriesId)}`, 12000);
+                const date = String(payload?.date ?? '').trim();
+                const rate = Number.parseFloat(payload?.rate);
+                if (date && Number.isFinite(rate)) {
+                    return {
+                        ...seriesSelection,
+                        date,
+                        rate
+                    };
+                }
+            } catch (error) {
+                // Proxy may be unavailable (e.g., opening index.html directly). Fall back to direct fetch.
+            }
+
+            const endpoints = FRED_CSV_ENDPOINTS_BY_SERIES(seriesSelection.seriesId);
+            let lastError = null;
+            for (const endpoint of endpoints) {
+                try {
+                    const csvText = await fetchTextWithTimeout(endpoint, 15000);
+                    const observation = parseLatestObservationFromFredCsv(csvText);
+                    if (!observation) throw new Error(`no-observation-${seriesSelection.seriesId}`);
+                    return {
+                        ...seriesSelection,
+                        ...observation
+                    };
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+            throw (lastError ?? new Error('fred-rate-fetch-failed'));
         };
 
         const scoreNameMatch = (normalizedTarget, normalizedCandidate) => {
@@ -604,6 +679,20 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             }
         };
 
+        const setLiveRateHint = (message, tone = 'info') => {
+            const el = document.getElementById('liveRateHint');
+            if (!el) return;
+            el.innerText = message;
+
+            if (tone === 'success') {
+                el.className = 'text-xs text-emerald-700 leading-5';
+            } else if (tone === 'warn') {
+                el.className = 'text-xs text-amber-700 leading-5';
+            } else {
+                el.className = 'text-xs text-gray-500 leading-5';
+            }
+        };
+
         const getUsBaselineLocationProfile = () => ({
             source: 'us',
             sourceName: DEFAULT_LOCATION_PROFILE.label,
@@ -845,6 +934,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 const monthlyMortgageInsurance = computeMortgageInsuranceForPeriod({
                     loanType: params.loanType,
                     balanceBeforePayment,
+                    balanceAfterPayment: balance,
                     homePrice: params.price,
                     annualPmiRate: params.annualPmiRate,
                     periodIndex: month,
@@ -1116,6 +1206,8 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             const targetPeriods = Math.max(0, Math.round(years * periodsPerYear));
             const cappedPeriods = Math.min(periodRows.length, targetPeriods);
             const selectedRows = periodRows.slice(0, cappedPeriods);
+            const milestoneYearStart = Math.max(0, cappedPeriods - periodsPerYear);
+            const milestoneYearRows = periodRows.slice(milestoneYearStart, cappedPeriods);
             if (!selectedRows.length) {
                 return {
                     totalPaid: 0,
@@ -1130,7 +1222,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 totalPaid: selectedRows.reduce((sum, row) => sum + row.payment, 0),
                 principalPaid: selectedRows.reduce((sum, row) => sum + row.principal, 0),
                 interestPaid: selectedRows.reduce((sum, row) => sum + row.interest, 0),
-                miPaid: selectedRows.reduce((sum, row) => sum + row.pmi, 0),
+                miPaid: milestoneYearRows.reduce((sum, row) => sum + row.pmi, 0),
                 balance: selectedRows[selectedRows.length - 1].balance
             };
         };
@@ -1276,14 +1368,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             setElText('loanTotalOfPayments', formatMoney(totalOfPaymentsEstimate));
             setElText('loanTip', formatPercent(tip, 2));
 
-            const sourceMeta = LOCATION_QUALITY_META[locationEstimateState.source] ?? LOCATION_QUALITY_META.unknown;
-            const sourceName = locationEstimateState.sourceName || 'Manual/default values';
-            const sourceYear = locationEstimateState.sourceYear ? String(locationEstimateState.sourceYear) : 'Not specified';
-            const taxLock = locationEstimateState.manualLocks.tax ? 'Tax manually overridden' : 'Tax follows applied estimate';
-            const insLock = locationEstimateState.manualLocks.insurance ? 'Insurance manually overridden' : 'Insurance follows applied estimate';
-            setElText('dataConfidenceLine', `Source quality: ${sourceMeta.label}. Basis: ${sourceName}.`);
-            setElText('dataFreshnessLine', `Source year: ${sourceYear}.`);
-            setElText('dataManualOverrideLine', `${taxLock}. ${insLock}.`);
+            renderAssumptionTransparency();
 
             setElText('stressRateUpPayment', formatMoney(stressRateTotal));
             setElText('stressRateUpDelta', `${formatSignedMoney(stressRateTotal - totalMonthly)} vs current`);
@@ -1298,20 +1383,26 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             const backDti = affordMode === 'expert' ? clamp(getVal('affordBackDti') / 100, 0, 1) : 0.36;
             const maxHousingAtBackDti = Math.max(0, (incomeMonthly * backDti) - debtsMonthly);
             const stressResultEl = document.getElementById('stressAffordabilityResult');
-            if (!stressResultEl) return;
+            let stressSummaryText = 'Can still afford? Unknown (set income/debts)';
 
-            if (incomeMonthly <= 0 || maxHousingAtBackDti <= 0) {
-                stressResultEl.innerText = 'Can still afford? Unknown (set income/debts)';
-                stressResultEl.className = 'text-xs font-semibold text-gray-700';
+            if (!stressResultEl || incomeMonthly <= 0 || maxHousingAtBackDti <= 0) {
+                if (stressResultEl) {
+                    stressResultEl.innerText = stressSummaryText;
+                    stressResultEl.className = 'text-xs font-semibold text-gray-700';
+                }
             } else if (worstCaseMonthly <= maxHousingAtBackDti) {
                 const headroom = maxHousingAtBackDti - worstCaseMonthly;
-                stressResultEl.innerText = `Can still afford? Yes (${formatMoney(headroom)} headroom)`;
+                stressSummaryText = `Can still afford? Yes (${formatMoney(headroom)} headroom)`;
+                stressResultEl.innerText = stressSummaryText;
                 stressResultEl.className = 'text-xs font-semibold text-emerald-700';
             } else {
                 const shortfall = worstCaseMonthly - maxHousingAtBackDti;
-                stressResultEl.innerText = `Can still afford? No (${formatMoney(shortfall)} shortfall)`;
+                stressSummaryText = `Can still afford? No (${formatMoney(shortfall)} shortfall)`;
+                stressResultEl.innerText = stressSummaryText;
                 stressResultEl.className = 'text-xs font-semibold text-rose-700';
             }
+
+            renderDecisionSummary({ stressSummaryText });
         };
 
         const updateModeVisibility = () => {
@@ -1372,6 +1463,123 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
         };
 
         const formatSignedMoney = (value) => `${value >= 0 ? '+' : '-'}${formatMoney(Math.abs(value))}`;
+
+        const getAssumptionSnapshot = () => {
+            const sourceMeta = LOCATION_QUALITY_META[locationEstimateState.source] ?? LOCATION_QUALITY_META.unknown;
+            const sourceName = locationEstimateState.sourceName || 'Manual/default values';
+            const sourceYear = locationEstimateState.sourceYear ? String(locationEstimateState.sourceYear) : 'Not specified';
+            const taxLock = locationEstimateState.manualLocks.tax ? 'Tax manually overridden' : 'Tax follows applied estimate';
+            const insuranceLock = locationEstimateState.manualLocks.insurance ? 'Insurance manually overridden' : 'Insurance follows applied estimate';
+            return {
+                sourceMeta,
+                sourceName,
+                sourceYear,
+                taxLock,
+                insuranceLock
+            };
+        };
+
+        const renderAssumptionTransparency = () => {
+            const snapshot = getAssumptionSnapshot();
+            const sourceText = `Source quality: ${snapshot.sourceMeta.label}. Basis: ${snapshot.sourceName}.`;
+            const yearText = `Source year: ${snapshot.sourceYear}.`;
+            const overrideText = `${snapshot.taxLock}. ${snapshot.insuranceLock}.`;
+
+            setElText('dataConfidenceLine', sourceText);
+            setElText('dataFreshnessLine', yearText);
+            setElText('dataManualOverrideLine', overrideText);
+
+            setElText('affordAssumptionSource', sourceText);
+            setElText('affordAssumptionYear', yearText);
+            setElText('affordAssumptionOverride', overrideText);
+
+            setElText('rentbuyAssumptionSource', sourceText);
+            setElText('rentbuyAssumptionYear', yearText);
+            setElText('rentbuyAssumptionOverride', overrideText);
+
+            setElText('refiAssumptionSource', sourceText);
+            setElText('refiAssumptionYear', yearText);
+            setElText('refiAssumptionOverride', overrideText);
+        };
+
+        const computeDecisionSummaryBestOffer = () => {
+            const price = getVal('rbPrice');
+            const monthlyRentStart = getVal('rbRent');
+            if (price <= 0 || monthlyRentStart <= 0) {
+                return {
+                    bestOffer: 'Need rent vs. buy inputs',
+                    why: 'Set Rent vs. Buy price and rent to compute a best-offer recommendation.',
+                    stress: ''
+                };
+            }
+
+            const rbMode = getSelectVal('rbMode', 'simple');
+            const isExpert = rbMode === 'expert';
+            const referenceHomePrice = getVal('homePrice');
+            const downPct = clamp((getVal('downPaymentPercent') / 100) || 0.20, 0, 0.95);
+            const annualRate = (getVal('interestRate') / 100) || 0.065;
+            const termMonths = (getVal('loanTerm') || 30) * 12;
+            const annualPmiRate = getVal('pmiRate') / 100;
+            const convPmiDropLtv = getConventionalPmiThresholdPct() / 100;
+            const loanType = getSelectVal('loanType', 'conventional');
+            const taxRate = referenceHomePrice > 0 ? (getVal('propertyTax') / referenceHomePrice) : 0.015;
+            const insuranceRate = referenceHomePrice > 0 ? (getVal('homeInsurance') / referenceHomePrice) : 0.01;
+            const baseParams = {
+                price,
+                monthlyRentStart,
+                appreciation: getVal('rbApprec') / 100,
+                rentInflation: getVal('rbRentInf') / 100,
+                maintenanceRate: getVal('rbMaint') / 100,
+                buyClosingRate: getVal('rbClosing') / 100,
+                opportunityAnnualReturn: isExpert ? (getVal('rbInvestReturn') / 100) : 0,
+                taxTreatment: isExpert ? getSelectVal('rbTaxTreatment', 'none') : 'none',
+                marginalTaxRate: isExpert ? (getVal('rbMarginalTax') / 100) : 0,
+                standardDeduction: isExpert ? getVal('rbStdDeduction') : 0,
+                downPct,
+                annualRate,
+                termMonths,
+                annualPmiRate,
+                convPmiDropLtv,
+                loanType,
+                taxRate,
+                insuranceRate,
+                hoaMonthly: getVal('hoaFee'),
+                saleCostRate: 0.06
+            };
+
+            const result = runRentVsBuyScenario(baseParams);
+            const finalAdvantage = result.finalRentCost - result.finalBuyCost;
+            const breakEvenText = formatBreakEven(result.breakEvenMonth);
+
+            if (finalAdvantage > RATE_EPSILON) {
+                return {
+                    bestOffer: 'Buy now',
+                    why: `Buying is ahead by ${formatMoney(finalAdvantage)} over 10 years. ${breakEvenText}.`
+                };
+            }
+            if (finalAdvantage < -RATE_EPSILON) {
+                return {
+                    bestOffer: 'Rent for now',
+                    why: `Renting is ahead by ${formatMoney(Math.abs(finalAdvantage))} over 10 years. ${breakEvenText}.`
+                };
+            }
+            return {
+                bestOffer: 'Near tie',
+                why: `Renting and buying are effectively tied over 10 years. ${breakEvenText}.`
+            };
+        };
+
+        const renderDecisionSummary = ({ stressSummaryText = '' } = {}) => {
+            const decision = computeDecisionSummaryBestOffer();
+            const assumptions = getAssumptionSnapshot();
+            setElText('decisionBestOffer', decision.bestOffer);
+            setElText('decisionWhy', decision.why);
+            setElText('decisionStress', stressSummaryText ? `Stress-test result: ${stressSummaryText}` : 'Stress-test result: Unknown');
+            setElText(
+                'decisionAssumptions',
+                `Assumptions: ${assumptions.sourceMeta.label}, year ${assumptions.sourceYear}. ${assumptions.taxLock}. ${assumptions.insuranceLock}.`
+            );
+        };
 
         const STAY_AFLOAT_PRESETS = {
             safe: { label: 'Safe', intent: 'Conservative cashflow guardrails', bufferPct: 0.30, targetDti: 0.30, reserveMonths: 6 },
@@ -1530,18 +1738,24 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
         // --- CALCULATION LOGIC ---
         function calcMortgage() {
             mortgageCalculator.calcMortgage();
+            renderAssumptionTransparency();
         }
 
         function calcAffordability() {
             affordabilityCalculator.calcAffordability();
+            renderAssumptionTransparency();
         }
 
         function calcRentVsBuy() {
             rentBuyCalculator.calcRentVsBuy();
+            renderAssumptionTransparency();
+            const stressSummaryText = document.getElementById('stressAffordabilityResult')?.innerText ?? '';
+            renderDecisionSummary({ stressSummaryText });
         }
 
         function calcRefinance() {
             refinanceCalculator.calcRefinance();
+            renderAssumptionTransparency();
         }
 
         // --- UI & EVENT BINDING ---
@@ -1844,14 +2058,50 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
 
             const locationCityEl = document.getElementById('locationCity');
             const applyLocationEstimateBtn = document.getElementById('applyLocationEstimateBtn');
+            const applyLiveRateBtn = document.getElementById('applyLiveRateBtn');
             const applyLocationEstimate = async (options = {}) => {
                 const applied = await applyLocationEstimateFromInputs(options);
                 if (!applied) return;
                 runCoreCalcs();
             };
+            let isApplyingLiveRate = false;
+            const applyLiveRate = async () => {
+                if (isApplyingLiveRate) return;
+                isApplyingLiveRate = true;
+                if (applyLiveRateBtn) applyLiveRateBtn.disabled = true;
+
+                const termYears = getVal('loanTerm');
+                const preferredSeries = resolveFredSeriesForTerm(termYears);
+                const loadingLabel = preferredSeries.exactMatch
+                    ? `${preferredSeries.requestedTerm}-year`
+                    : '30-year';
+                setLiveRateHint(`Fetching latest ${loadingLabel} mortgage average...`, 'info');
+
+                try {
+                    const latest = await fetchLatestFreddieMacRate(termYears);
+                    setNumberInput('interestRate', latest.rate, 2);
+                    runCoreCalcs();
+
+                    const benchmarkLabel = latest.seriesId === FRED_SERIES_BY_TERM[15] ? '15-year' : '30-year';
+                    const termNote = latest.exactMatch
+                        ? ''
+                        : ` ${latest.requestedTerm}-year loans use the ${benchmarkLabel} benchmark.`;
+                    setLiveRateHint(`Applied ${latest.rate.toFixed(2)}% from ${benchmarkLabel} PMMS (${latest.date}).${termNote}`, latest.exactMatch ? 'success' : 'warn');
+                } catch (error) {
+                    setLiveRateHint('Live-rate fetch blocked on this host. Run `npm run dev` and open http://localhost:4173, then retry.', 'warn');
+                } finally {
+                    isApplyingLiveRate = false;
+                    if (applyLiveRateBtn) applyLiveRateBtn.disabled = false;
+                }
+            };
             if (applyLocationEstimateBtn) {
                 applyLocationEstimateBtn.addEventListener('click', () => {
                     void applyLocationEstimate({ forceOverwriteManual: true });
+                });
+            }
+            if (applyLiveRateBtn) {
+                applyLiveRateBtn.addEventListener('click', () => {
+                    void applyLiveRate();
                 });
             }
             if (locationCityEl) {
@@ -1906,6 +2156,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             setLocationQualityBadge('unknown');
             setLocationManualLockHint();
             setLocationEstimateHint('Enter City, ST and press Enter or click Apply City Estimate. Fallback ladder: City -> County -> Metro -> State -> U.S. baseline.');
+            setLiveRateHint('Uses Freddie Mac PMMS weekly averages via FRED (15-year and 30-year series).');
             syncDownPaymentFromPercent();
             syncModalBodyLock();
             runCoreCalcs();

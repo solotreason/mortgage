@@ -55,6 +55,7 @@ export const solveRateFromPayment = (amountFinanced, payment, months) => {
 export const computeMortgageInsuranceForPeriod = ({
     loanType,
     balanceBeforePayment,
+    balanceAfterPayment,
     homePrice,
     annualPmiRate,
     periodIndex,
@@ -67,6 +68,7 @@ export const computeMortgageInsuranceForPeriod = ({
 
     if (loanType === 'conventional') {
         const threshold = clamp(convPmiDropLtv, 0.5, 0.95);
+        if (Number.isFinite(balanceAfterPayment) && (balanceAfterPayment / homePrice) <= threshold) return 0;
         if ((balanceBeforePayment / homePrice) <= threshold) return 0;
         return (balanceBeforePayment * annualPmiRate) / periodsPerYear;
     }
@@ -74,7 +76,7 @@ export const computeMortgageInsuranceForPeriod = ({
     if (loanType === 'fha') {
         const maxYears = originationLtv <= 0.90 ? 11 : Infinity;
         const elapsedYears = periodIndex / periodsPerYear;
-        if (elapsedYears > maxYears) return 0;
+        if (elapsedYears >= maxYears) return 0;
         return (balanceBeforePayment * annualPmiRate) / periodsPerYear;
     }
 
@@ -164,6 +166,7 @@ export const simulateMortgageSchedule = ({
         const periodicPmi = computeMortgageInsuranceForPeriod({
             loanType,
             balanceBeforePayment,
+            balanceAfterPayment: balance,
             homePrice,
             annualPmiRate,
             periodIndex: period,

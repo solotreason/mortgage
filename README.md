@@ -12,6 +12,11 @@ A browser-based mortgage analysis tool with four calculators:
 
 This project is static HTML/CSS/JS. Open `index.html` in a browser.
 
+For live mortgage-rate autofill, run:
+
+- `npm run dev`
+- Open `http://localhost:4173`
+
 To export a report, click `Snap to PDF` in the top-right header and choose **Save to PDF** in your browser print dialog.
 
 ## Files
