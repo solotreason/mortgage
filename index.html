@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' https://geocoding-api.open-meteo.com https://api.census.gov https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' https://geocoding-api.open-meteo.com https://api.census.gov https://fred.stlouisfed.org https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; upgrade-insecure-requests">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>Mortgage Suite</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.2" integrity="sha384-qKt1F1k7v69ebd7q6Na1d2FGVMI+43GgA5hpfz7i+zDfrz8rIjXYu7majL1fXSeS" crossorigin="anonymous"></script>
@@ -71,6 +71,10 @@
                                 <div class="relative"><input type="number" min="0" id="interestRate" value="6.5" step="0.1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-3 pr-7"><span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span></div>
                             </div>
                             <div><label class="text-xs font-medium text-gray-500 uppercase">Term</label><select id="loanTerm" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white"><option value="30">30 Yrs</option><option value="20">20 Yrs</option><option value="15">15 Yrs</option><option value="10">10 Yrs</option></select></div>
+                        </div>
+                        <div class="space-y-1">
+                            <button type="button" id="applyLiveRateBtn" class="inline-flex items-center rounded-lg bg-sky-600 text-white text-xs font-semibold px-3 py-2 hover:bg-sky-700 transition-colors">Use Live Avg Rate</button>
+                            <p id="liveRateHint" class="text-xs text-gray-500 leading-5">Uses Freddie Mac PMMS weekly averages via FRED (15-year and 30-year series).</p>
                         </div>
                     </div>
 
@@ -203,7 +207,7 @@
                                             <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">Total Paid</th>
                                             <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">Principal Paid</th>
                                             <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">Interest Paid</th>
-                                            <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">MI Paid</th>
+                                            <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">MI Paid (Year)</th>
                                             <th class="px-4 py-2 text-left text-[11px] font-bold text-gray-500 uppercase">Remaining Balance</th>
                                         </tr>
                                     </thead>
@@ -286,6 +290,21 @@
                                     <p id="stressTaxUpPayment" class="font-semibold text-gray-900">$0</p>
                                     <p id="stressTaxUpDelta" class="text-[11px] text-gray-500">$0 change</p>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div id="decisionSummarySection" class="rounded-xl border border-gray-200 overflow-hidden">
+                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                                <p class="text-xs font-bold text-gray-700 uppercase">Decision Summary (One Page)</p>
+                            </div>
+                            <div class="p-4 space-y-2 text-sm">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-gray-600">Best Offer</span>
+                                    <span id="decisionBestOffer" class="font-semibold text-gray-900">N/A</span>
+                                </div>
+                                <p id="decisionWhy" class="text-gray-700"></p>
+                                <p id="decisionStress" class="text-gray-700"></p>
+                                <p id="decisionAssumptions" class="text-[11px] text-gray-500"></p>
                             </div>
                         </div>
                     </div>
@@ -417,6 +436,12 @@
                         <div class="relative w-full max-w-[300px] h-48"><canvas id="affordChart"></canvas></div>
                     </div>
                 </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-1">
+                    <p class="text-xs font-bold text-gray-600 uppercase">Assumption Transparency</p>
+                    <p id="affordAssumptionSource" class="text-sm text-gray-700"></p>
+                    <p id="affordAssumptionYear" class="text-sm text-gray-700"></p>
+                    <p id="affordAssumptionOverride" class="text-[11px] text-gray-500"></p>
+                </div>
                 <div id="affordWarnings" class="hidden p-4 rounded-xl border text-sm afford-expert"></div>
             </div>
         </div>
@@ -459,6 +484,12 @@
                     <div class="mb-4">
                         <h3 class="text-lg font-bold text-gray-900">10-Year Cumulative Net Cost</h3>
                     </div>
+                    <div class="mb-4 space-y-1 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                        <p class="text-xs font-bold text-gray-600 uppercase">Assumption Transparency</p>
+                        <p id="rentbuyAssumptionSource" class="text-sm text-gray-700"></p>
+                        <p id="rentbuyAssumptionYear" class="text-sm text-gray-700"></p>
+                        <p id="rentbuyAssumptionOverride" class="text-[11px] text-gray-500"></p>
+                    </div>
                     <div class="relative w-full h-72"><canvas id="rentBuyChart"></canvas></div>
                     <div id="rbWarnings" class="hidden mt-4 p-4 rounded-xl border text-sm rb-expert"></div>
                     <div id="rbVerdict" class="mt-6 p-4 rounded-xl text-center text-lg"></div>
@@ -498,6 +529,12 @@
                     </div>
                 </div>
                 <div class="lg:col-span-8 flex flex-col space-y-6">
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-1">
+                        <p class="text-xs font-bold text-gray-600 uppercase">Assumption Transparency</p>
+                        <p id="refiAssumptionSource" class="text-sm text-gray-700"></p>
+                        <p id="refiAssumptionYear" class="text-sm text-gray-700"></p>
+                        <p id="refiAssumptionOverride" class="text-[11px] text-gray-500"></p>
+                    </div>
                     <div id="refiResult" class="bg-white p-6 rounded-2xl border border-gray-200 text-center shadow-sm">
                         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">
                             <div><p class="text-xs font-bold text-gray-500 uppercase">New Payment</p><p id="refiNewPay" class="text-3xl font-bold text-purple-600">$0</p></div>
