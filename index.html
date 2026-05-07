@@ -63,7 +63,8 @@
                         <div><label class="text-xs font-medium text-gray-500 uppercase">Home Price</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="homePrice" value="350,000" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
                         <div class="grid grid-cols-2 gap-4">
                             <div><label class="text-xs font-medium text-gray-500 uppercase">Down Pmt</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="downPayment" value="17,500" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
-                            <div><label class="text-xs font-medium text-gray-500 uppercase">Percent</label><div class="relative"><input type="number" min="0" step="0.1" id="downPaymentPercent" value="5" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-3 pr-7"><span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span></div></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase">Down %</label><div class="relative"><input type="number" min="0" max="100" step="0.1" id="downPaymentPercent" value="5" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-3 pr-7"><span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span></div></div>
+                            <div class="col-span-2"><label class="text-xs font-medium text-gray-500 uppercase" title="LTV means loan-to-value: base loan amount divided by home price.">Loan to Value</label><div class="relative"><input type="number" min="0" max="100" step="0.1" id="loanToValue" value="95" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-3 pr-7"><span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span></div></div>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
@@ -149,7 +150,7 @@
                 </div>
 
                 <div class="lg:col-span-8 space-y-6 print-full">
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
                         <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
                             <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">Total Monthly</p>
                             <p id="totalMonthlyDisplay" class="metric-value text-gray-900">$0</p>
@@ -165,6 +166,10 @@
                         <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
                             <p class="text-[10px] font-bold text-gray-500 uppercase mb-1" title="APR means Annual Percentage Rate. Eff. Cost means effective borrowing cost including finance charges.">APR (Eff. Cost)</p>
                             <p id="aprDisplay" class="metric-value text-indigo-600">0.00%</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
+                            <p class="text-[10px] font-bold text-gray-500 uppercase mb-1" title="Loan-to-value uses base loan amount divided by home price.">Loan to Value</p>
+                            <p id="ltvDisplay" class="metric-value text-sky-700">0.00%</p>
                         </div>
                     </div>
 

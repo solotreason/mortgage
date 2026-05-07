@@ -1449,6 +1449,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             const homePrice = getVal('homePrice');
             const percent = clamp(getVal('downPaymentPercent'), 0, 100);
             setCurrencyInput('downPayment', homePrice * (percent / 100));
+            setNumberInput('loanToValue', 100 - percent, 2);
             isSyncingDownPayment = false;
         };
 
@@ -1459,6 +1460,18 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             const downPayment = getVal('downPayment');
             const pct = homePrice > 0 ? clamp((downPayment / homePrice) * 100, 0, 100) : 0;
             setNumberInput('downPaymentPercent', pct, 2);
+            setNumberInput('loanToValue', 100 - pct, 2);
+            isSyncingDownPayment = false;
+        };
+
+        const syncDownPaymentFromLoanToValue = () => {
+            if (isSyncingDownPayment) return;
+            isSyncingDownPayment = true;
+            const homePrice = getVal('homePrice');
+            const ltv = clamp(getVal('loanToValue'), 0, 100);
+            const downPaymentPct = 100 - ltv;
+            setNumberInput('downPaymentPercent', downPaymentPct, 2);
+            setCurrencyInput('downPayment', homePrice * (downPaymentPct / 100));
             isSyncingDownPayment = false;
         };
 
@@ -1875,6 +1888,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
 
             updateModeVisibility();
             updateConventionalPmiControls();
+            if (!Object.prototype.hasOwnProperty.call(payload.fields, 'loanToValue')) syncPercentFromDownPayment();
 
             const targetTab = isKnownTab(payload.activeTab) ? payload.activeTab : 'mortgage';
             switchTab(targetTab);
@@ -2129,6 +2143,11 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
 
             document.getElementById('downPaymentPercent').addEventListener('input', () => {
                 syncDownPaymentFromPercent();
+                runMortgageAndRentCalcs();
+            });
+
+            document.getElementById('loanToValue').addEventListener('input', () => {
+                syncDownPaymentFromLoanToValue();
                 runMortgageAndRentCalcs();
             });
 
