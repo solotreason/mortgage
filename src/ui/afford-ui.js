@@ -8,7 +8,8 @@ export const createAffordabilityCalculator = ({
     formatMoney,
     formatPercent,
     renderWarnings,
-    updateModeVisibility
+    updateModeVisibility,
+    syncChart
 }) => {
     const calcAffordability = () => {
         updateModeVisibility();
@@ -42,17 +43,16 @@ export const createAffordabilityCalculator = ({
 
         if (typeof Chart !== 'undefined') {
             try {
-                if (state.affordChart) state.affordChart.destroy();
                 const housingCost = clamp(maxPI + fixed, 0, income);
                 const debtCost = clamp(debts, 0, Math.max(0, income - housingCost));
                 const remaining = Math.max(0, income - housingCost - debtCost);
-                state.affordChart = new Chart(document.getElementById('affordChart'), {
+                state.affordChart = syncChart(state.affordChart, document.getElementById('affordChart'), {
                     type: 'pie',
                     data: {
                         labels: ['Housing', 'Debts', 'Remaining'],
                         datasets: [{ data: [housingCost, debtCost, remaining], backgroundColor: ['#10b981', '#f43f5e', '#e5e7eb'] }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false }
+                    options: {}
                 });
             } catch (e) {
                 console.error('Afford chart error:', e);

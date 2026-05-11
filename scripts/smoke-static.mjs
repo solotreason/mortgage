@@ -27,6 +27,7 @@ const requiredIds = [
     'tab-afford',
     'tab-rentbuy',
     'tab-refinance',
+    'propertyListingUrl',
     'loanToValue',
     'ltvDisplay'
 ];

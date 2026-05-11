@@ -67,6 +67,7 @@ export const computeMortgageInsuranceForPeriod = ({
     if (loanType === 'va') return 0;
 
     if (loanType === 'conventional') {
+        if (Number.isFinite(originationLtv) && originationLtv <= 0.80 + RATE_EPSILON) return 0;
         const threshold = clamp(convPmiDropLtv, 0.5, 0.95);
         if (Number.isFinite(balanceAfterPayment) && (balanceAfterPayment / homePrice) <= threshold) return 0;
         if ((balanceBeforePayment / homePrice) <= threshold) return 0;

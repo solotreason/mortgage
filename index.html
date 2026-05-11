@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' https://geocoding-api.open-meteo.com https://api.census.gov https://fred.stlouisfed.org https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' http://localhost:63343 http://127.0.0.1:63343 http://localhost:4173 http://127.0.0.1:4173 https://fred.stlouisfed.org https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; upgrade-insecure-requests">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>Mortgage Suite</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.2" integrity="sha384-qKt1F1k7v69ebd7q6Na1d2FGVMI+43GgA5hpfz7i+zDfrz8rIjXYu7majL1fXSeS" crossorigin="anonymous"></script>
@@ -83,21 +83,19 @@
                         <h2 class="text-lg font-semibold text-gray-900" title="Ins means homeowners insurance premiums.">Taxes, Ins & Mortgage Insurance</h2>
                         <div class="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 space-y-2">
                             <div class="flex items-center justify-between gap-2">
-                                <label class="text-xs font-medium text-indigo-900 uppercase">City, ST</label>
+                                <label class="text-xs font-medium text-indigo-900 uppercase">Realtor URL</label>
                                 <span id="locationQualityBadge" class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-indigo-50 border-indigo-200 text-indigo-700">Not Applied</span>
                             </div>
-                            <input type="text" id="locationCity" list="locationCityOptions" placeholder="Austin, TX" autocomplete="off" class="w-full mt-1 border-indigo-200 rounded-lg shadow-sm border py-2 px-3">
-                            <datalist id="locationCityOptions"></datalist>
+                            <input type="url" id="propertyListingUrl" placeholder="https://www.realtor.com/realestateandhomes-detail/..." autocomplete="url" class="w-full mt-1 border-indigo-200 rounded-lg shadow-sm border py-2 px-3">
                             <div class="flex flex-wrap items-center gap-2">
-                                <button type="button" id="applyLocationEstimateBtn" class="inline-flex items-center rounded-lg bg-indigo-600 text-white text-xs font-semibold px-3 py-2 hover:bg-indigo-700 transition-colors">Apply City Estimate</button>
-                                <span id="locationManualLockHint" class="text-xs text-amber-800"></span>
+                                <button type="button" id="applyLocationEstimateBtn" class="inline-flex items-center rounded-lg bg-indigo-600 text-white text-xs font-semibold px-3 py-2 hover:bg-indigo-700 transition-colors">Apply Listing Data</button>
                             </div>
-                            <p id="locationEstimateHint" class="text-xs text-indigo-800 leading-5">Enter City, ST and press Enter (or choose a suggestion) to auto-fill annual tax, insurance, and PMI/MIP assumptions from live city/county/metro/state data.</p>
+ <p id="locationEstimateHint" class="text-xs text-indigo-800 leading-5">Paste a Realtor listing URL to auto-fill home price, annual property tax, and monthly HOA. HOA defaults to $0 when no fee is found.</p>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div><label class="text-xs font-medium text-gray-500 uppercase">Prop Tax (Yr)</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="propertyTax" value="4,200" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
                             <div><label class="text-xs font-medium text-gray-500 uppercase">Ins (Yr)</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="homeInsurance" value="4,800" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
-                            <div><label class="text-xs font-medium text-gray-500 uppercase" title="HOA means homeowners association dues charged monthly.">HOA (Mo)</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="hoaFee" value="350" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
+                            <div><label class="text-xs font-medium text-gray-500 uppercase" title="HOA means homeowners association dues charged monthly.">HOA (Mo)</label><div class="relative"><span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span><input type="text" inputmode="numeric" data-currency="true" id="hoaFee" value="0" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-7 pr-3"></div></div>
                             <div><label class="text-xs font-medium text-gray-500 uppercase" title="PMI means Private Mortgage Insurance (usually conventional loans). MIP means Mortgage Insurance Premium (usually FHA loans).">PMI/MIP Rate (Yr)</label><div class="relative"><input type="number" min="0" id="pmiRate" value="0.75" step="0.05" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-3 pr-7"><span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span></div></div>
                             <div><label class="text-xs font-medium text-gray-500 uppercase" title="Choose when conventional PMI should end. 78% is strict HPA auto-termination, 80% is common borrower-request cancellation.">Conv PMI Rule</label><select id="convPmiRule" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 px-3 bg-white"><option value="strict78">Strict HPA Auto (78% LTV)</option><option value="request80">Borrower Request (80% LTV)</option><option value="custom">Custom LTV</option></select></div>
                             <div id="convPmiCustomWrap"><label class="text-xs font-medium text-gray-500 uppercase" title="LTV means Loan-to-Value ratio.">Custom PMI Drop LTV</label><div class="relative"><input type="number" min="50" max="95" id="convPmiDropLtv" value="78" step="1" class="w-full mt-1 border-gray-300 rounded-lg shadow-sm border py-2 pl-3 pr-7"><span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span></div></div>
@@ -254,8 +252,30 @@
                         </div>
 
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                            <div class="rounded-xl border border-gray-200 p-4 space-y-2">
-                                <p class="text-xs font-bold text-gray-700 uppercase">Escrow Clarity</p>
+                            <div class="rounded-xl border border-gray-200 p-4 space-y-3">
+                                <div class="flex items-center justify-between gap-2">
+                                    <p class="text-xs font-bold text-gray-700 uppercase">Escrow Clarity</p>
+                                    <p id="escrowMonthlyTotal" class="text-sm font-semibold text-gray-900"></p>
+                                </div>
+                                <div class="flex h-3 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
+                                    <div id="escrowTaxSegment" class="h-full bg-blue-500 transition-all duration-500 ease-out"></div>
+                                    <div id="escrowInsuranceSegment" class="h-full bg-sky-500 transition-all duration-500 ease-out"></div>
+                                    <div id="escrowHoaSegment" class="h-full bg-slate-300 transition-all duration-500 ease-out"></div>
+                                </div>
+                                <div class="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-3">
+                                    <div class="rounded-lg border border-blue-100 bg-blue-50 px-2 py-1">
+                                        <p id="escrowTaxLabel" class="font-semibold text-blue-900"></p>
+                                        <p id="escrowTaxValue" class="text-blue-700"></p>
+                                    </div>
+                                    <div class="rounded-lg border border-sky-100 bg-sky-50 px-2 py-1">
+                                        <p id="escrowInsuranceLabel" class="font-semibold text-sky-900"></p>
+                                        <p id="escrowInsuranceValue" class="text-sky-700"></p>
+                                    </div>
+                                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                                        <p id="escrowHoaLabel" class="font-semibold text-slate-800"></p>
+                                        <p id="escrowHoaValue" class="text-slate-600"></p>
+                                    </div>
+                                </div>
                                 <p id="escrowIncluded" class="text-sm text-gray-700"></p>
                                 <p id="escrowExcluded" class="text-sm text-gray-700"></p>
                                 <p id="escrowAssumption" class="text-[11px] text-gray-500"></p>

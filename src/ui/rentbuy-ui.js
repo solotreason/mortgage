@@ -8,6 +8,7 @@ export const createRentBuyCalculator = ({
     formatBreakEven,
     renderWarnings,
     updateModeVisibility,
+    syncChart,
     getConventionalPmiThresholdPct,
     runRentVsBuyScenario
 }) => {
@@ -65,8 +66,7 @@ export const createRentBuyCalculator = ({
 
         if (typeof Chart !== 'undefined') {
             try {
-                if (state.rentBuyChart) state.rentBuyChart.destroy();
-                state.rentBuyChart = new Chart(document.getElementById('rentBuyChart'), {
+                state.rentBuyChart = syncChart(state.rentBuyChart, document.getElementById('rentBuyChart'), {
                     type: 'line',
                     data: {
                         labels: Array.from({ length: 10 }, (_, index) => `Yr ${index + 1}`),
@@ -75,7 +75,7 @@ export const createRentBuyCalculator = ({
                             { label: 'Buy Net Cost (equity + tax adjusted)', data: baseResult.buyData, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.3 }
                         ]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false } }
+                    options: { interaction: { mode: 'index', intersect: false } }
                 });
             } catch (e) {
                 console.error('RentBuy chart error:', e);
