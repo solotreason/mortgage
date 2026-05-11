@@ -10,12 +10,14 @@ A browser-based mortgage analysis tool with four calculators:
 
 ## Run
 
-This project is static HTML/CSS/JS. Open `index.html` in a browser.
+This project is static HTML/CSS/JS. Open `index.html` in a browser for the calculators.
 
-For live mortgage-rate autofill, run:
+For live mortgage-rate autofill and Realtor property tax + HOA lookup, run:
 
 - `npm run dev`
-- Open `http://localhost:4173`
+- Open `http://localhost:63343`
+
+If you are using WebStorm's built-in static server, you can keep the page open at `http://localhost:63342`; the local API server still runs on `http://localhost:63343`.
 
 To export a report, click `Snap to PDF` in the top-right header and choose **Save to PDF** in your browser print dialog.
 

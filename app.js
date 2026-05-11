@@ -3,6 +3,7 @@ import {
     computeMonthlyPayment,
     computeMortgageInsuranceForPeriod
 } from './src/core/mortgage-core.js';
+import { getListingSourceFromUrl } from './src/core/listing-cost-parser.js';
 import { createMortgageCalculator } from './src/ui/mortgage-ui.js';
 import { createAffordabilityCalculator } from './src/ui/afford-ui.js';
 import { createRentBuyCalculator } from './src/ui/rentbuy-ui.js';
@@ -10,6 +11,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
 
 // --- UTILS ---
         const formatMoney = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number.isFinite(n) ? n : 0);
+        const formatWholeMoney = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number.isFinite(n) ? n : 0);
         const formatPercent = (n, digits = 2) => `${(Number.isFinite(n) ? n * 100 : 0).toFixed(digits)}%`;
 
         const getVal = (id) => {
@@ -34,11 +36,104 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             el.value = safe.toFixed(digits);
         };
 
+        const CHART_ANIMATION = Object.freeze({
+            duration: 560,
+            easing: 'easeOutQuart'
+        });
+
+        const syncChartInstance = (existingChart, canvas, config) => {
+            if (typeof Chart === 'undefined' || !canvas) return existingChart ?? null;
+
+            const nextLabels = Array.isArray(config?.data?.labels) ? [...config.data.labels] : [];
+            const nextDatasets = Array.isArray(config?.data?.datasets)
+                ? config.data.datasets.map((dataset) => ({
+                    ...dataset,
+                    data: Array.isArray(dataset.data) ? [...dataset.data] : dataset.data
+                }))
+                : [];
+            const configuredAnimation = config?.options?.animation && typeof config.options.animation === 'object'
+                ? config.options.animation
+                : {};
+            const nextOptions = config?.options
+                ? {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    ...config.options,
+                    animation: {
+                        ...CHART_ANIMATION,
+                        ...configuredAnimation
+                    }
+                }
+                : {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: CHART_ANIMATION
+                };
+
+            if (!existingChart || !existingChart.canvas) {
+                return new Chart(canvas, {
+                    type: config?.type ?? 'line',
+                    data: {
+                        labels: nextLabels,
+                        datasets: nextDatasets
+                    },
+                    options: nextOptions
+                });
+            }
+
+            existingChart.data.labels = nextLabels;
+            existingChart.data.datasets = nextDatasets;
+            existingChart.update();
+            return existingChart;
+        };
+
+        const DEV_API_PORT = 63343;
+        const LEGACY_DEV_API_PORT = 4173;
+        const buildApiOriginCandidates = () => {
+            const candidates = [];
+            if (typeof window !== 'undefined' && window.location) {
+                const currentOrigin = String(window.location.origin ?? '').trim();
+                const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+                const hostname = window.location.hostname || 'localhost';
+                const currentPort = String(window.location.port ?? '').trim();
+                if (currentPort === '63342') {
+                    candidates.push(`${protocol}//${hostname}:${DEV_API_PORT}`);
+                }
+                if (/^https?:\/\//i.test(currentOrigin)) candidates.push(currentOrigin);
+                if (currentPort !== '63342') {
+                    candidates.push(`${protocol}//${hostname}:${DEV_API_PORT}`);
+                }
+                candidates.push(`${protocol}//${hostname}:${LEGACY_DEV_API_PORT}`);
+            } else {
+                candidates.push(`http://localhost:${DEV_API_PORT}`);
+                candidates.push(`http://localhost:${LEGACY_DEV_API_PORT}`);
+            }
+            return [...new Set(candidates)];
+        };
+
+        const buildApiUrlCandidates = (pathAndQuery) => {
+            const target = String(pathAndQuery ?? '').trim();
+            if (!target) return [];
+            if (/^https?:\/\//i.test(target)) return [target];
+            const suffix = target.startsWith('/') ? target : `/${target}`;
+            return buildApiOriginCandidates().map((origin) => `${origin}${suffix}`);
+        };
+
+        const fetchApiJsonWithTimeout = async (pathAndQuery, timeoutMs = 12000, externalSignal = null) => {
+            let lastError = null;
+            for (const url of buildApiUrlCandidates(pathAndQuery)) {
+                try {
+                    return await fetchJsonWithTimeout(url, timeoutMs, externalSignal);
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+            throw (lastError ?? new Error('api-fetch-failed'));
+        };
+
         const RATE_EPSILON = 1e-10;
         const SALT_CAP_ANNUAL = 10000;
-        const DEFAULT_LOCATION_PROFILE = { label: 'U.S. Baseline', taxRate: 0.0110, insuranceRate: 0.0065 };
-        const CITY_SEARCH_ENDPOINT = 'https://geocoding-api.open-meteo.com/v1/search';
-        const ACS_YEAR_CANDIDATES = [2024];
+        const LISTING_COSTS_ENDPOINT = '/api/listing-costs';
         const FRED_SERIES_BY_TERM = Object.freeze({
             15: 'MORTGAGE15US',
             30: 'MORTGAGE30US'
@@ -50,106 +145,36 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
         ]);
         const STAY_AFLOAT_POLICY_VERSION = 'Stay Afloat Policy v1';
         const LOCATION_QUALITY_META = {
-            city: {
-                label: 'Live city match',
+            realtor: {
+                label: 'Realtor listing',
+                className: 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-red-50 border-red-200 text-red-800'
+            },
+            listing: {
+                label: 'Listing URL',
                 className: 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-emerald-50 border-emerald-200 text-emerald-800'
-            },
-            county: {
-                label: 'County proxy',
-                className: 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-sky-50 border-sky-200 text-sky-800'
-            },
-            metro: {
-                label: 'Metro proxy',
-                className: 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-cyan-50 border-cyan-200 text-cyan-800'
-            },
-            state: {
-                label: 'State proxy',
-                className: 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-50 border-amber-200 text-amber-800'
-            },
-            us: {
-                label: 'U.S. baseline',
-                className: 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-gray-100 border-gray-300 text-gray-700'
             },
             unknown: {
                 label: 'Not applied',
                 className: 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-indigo-50 border-indigo-200 text-indigo-700'
             }
         };
-        const MORTGAGED_INSURANCE_BUCKETS = [
-            { variable: 'B25141_003E', midpoint: 50 },
-            { variable: 'B25141_004E', midpoint: 200 },
-            { variable: 'B25141_005E', midpoint: 400 },
-            { variable: 'B25141_006E', midpoint: 650 },
-            { variable: 'B25141_007E', midpoint: 900 },
-            { variable: 'B25141_008E', midpoint: 1250 },
-            { variable: 'B25141_009E', midpoint: 1750 },
-            { variable: 'B25141_010E', midpoint: 2250 },
-            { variable: 'B25141_011E', midpoint: 2750 },
-            { variable: 'B25141_012E', midpoint: 3250 },
-            { variable: 'B25141_013E', midpoint: 3750 },
-            { variable: 'B25141_014E', midpoint: 4500 }
-        ];
-        const STATE_FIPS_BY_CODE = {
-            AL: '01', AK: '02', AZ: '04', AR: '05', CA: '06', CO: '08', CT: '09', DE: '10', DC: '11', FL: '12',
-            GA: '13', HI: '15', ID: '16', IL: '17', IN: '18', IA: '19', KS: '20', KY: '21', LA: '22', ME: '23',
-            MD: '24', MA: '25', MI: '26', MN: '27', MS: '28', MO: '29', MT: '30', NE: '31', NV: '32', NH: '33',
-            NJ: '34', NM: '35', NY: '36', NC: '37', ND: '38', OH: '39', OK: '40', OR: '41', PA: '42', RI: '44',
-            SC: '45', SD: '46', TN: '47', TX: '48', UT: '49', VT: '50', VA: '51', WA: '53', WV: '54', WI: '55', WY: '56'
-        };
-        const STATE_CODE_BY_NAME = {
-            alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA', colorado: 'CO', connecticut: 'CT',
-            delaware: 'DE', 'district of columbia': 'DC', florida: 'FL', georgia: 'GA', hawaii: 'HI', idaho: 'ID', illinois: 'IL',
-            indiana: 'IN', iowa: 'IA', kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD',
-            massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS', missouri: 'MO', montana: 'MT',
-            nebraska: 'NE', nevada: 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
-            'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH', oklahoma: 'OK', oregon: 'OR', pennsylvania: 'PA',
-            'rhode island': 'RI', 'south carolina': 'SC', 'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT',
-            vermont: 'VT', virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY'
-        };
-        const locationLiveState = { options: [], suggestionsAbortController: null };
         const locationEstimateState = {
             source: 'unknown',
             sourceYear: null,
             sourceName: '',
-            isProgrammaticWrite: false,
-            manualLocks: { tax: false, insurance: false }
+            sourceUrl: '',
+            taxInsight: '',
+            hoaInsight: '',
+            fetchInsight: ''
         };
         const REQUEST_GUARD_WINDOW_MS = 60000;
         const REQUEST_GUARD_MAX_PER_WINDOW = 60;
         const REQUEST_GUARD_MAX_PER_SESSION = 400;
         const requestGuardState = new Map();
-        const acsPlaceRowsCache = new Map();
-        const acsCountyRowsCache = new Map();
-        const acsMetroRowsCache = new Map();
-        const acsStateRowsCache = new Map();
-        const ACS_REQUESTED_VARIABLES = ['NAME', 'B25077_001E', 'B25103_001E', ...MORTGAGED_INSURANCE_BUCKETS.map(bucket => bucket.variable)].join(',');
 
         const toFiniteNumber = (value) => {
             const parsed = Number.parseFloat(value);
             return Number.isFinite(parsed) ? parsed : 0;
-        };
-        const normalizeLocationText = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-        const normalizeCityNameForMatch = (value) => normalizeLocationText(value)
-            .replace(/\b(cdp|city and borough|city|township|town|village|borough|municipality|municipio|census designated place)\b/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-        const normalizeCountyNameForMatch = (value) => normalizeLocationText(value)
-            .replace(/\b(county|parish|borough|census area|municipio|city and borough)\b/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-        const normalizeMetroNameForMatch = (value) => normalizeLocationText(value)
-            .replace(/\b(metro area|metropolitan statistical area|micropolitan statistical area|msa)\b/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-        const parseStateCodeFromText = (value) => {
-            const match = String(value ?? '').trim().match(/,\s*([a-z]{2})$/i);
-            return match ? match[1].toUpperCase() : '';
-        };
-        const getStateCode = (stateText) => {
-            const normalized = normalizeLocationText(stateText);
-            if (!normalized) return '';
-            if (normalized.length === 2) return normalized.toUpperCase();
-            return STATE_CODE_BY_NAME[normalized] ?? '';
         };
 
         const guardExternalRequest = (url) => {
@@ -250,7 +275,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
         const fetchLatestFreddieMacRate = async (termYears) => {
             const seriesSelection = resolveFredSeriesForTerm(termYears);
             try {
-                const payload = await fetchJsonWithTimeout(`${LIVE_RATE_PROXY_ENDPOINT}?series=${encodeURIComponent(seriesSelection.seriesId)}`, 12000);
+                const payload = await fetchApiJsonWithTimeout(`${LIVE_RATE_PROXY_ENDPOINT}?series=${encodeURIComponent(seriesSelection.seriesId)}`, 12000);
                 const date = String(payload?.date ?? '').trim();
                 const rate = Number.parseFloat(payload?.rate);
                 if (date && Number.isFinite(rate)) {
@@ -282,338 +307,12 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             throw (lastError ?? new Error('fred-rate-fetch-failed'));
         };
 
-        const scoreNameMatch = (normalizedTarget, normalizedCandidate) => {
-            if (!normalizedTarget || !normalizedCandidate) return 0;
-            if (normalizedTarget === normalizedCandidate) return 4;
-            if (normalizedCandidate.startsWith(normalizedTarget) || normalizedTarget.startsWith(normalizedCandidate)) return 3;
-            if (normalizedCandidate.includes(normalizedTarget) || normalizedTarget.includes(normalizedCandidate)) return 2;
-            const targetWords = normalizedTarget.split(' ').filter(Boolean);
-            const candidateWords = normalizedCandidate.split(' ').filter(Boolean);
-            const overlap = targetWords.filter(word => candidateWords.includes(word)).length;
-            if (overlap >= 2) return 1;
-            return 0;
-        };
-
         const setLocationQualityBadge = (source = 'unknown', sourceYear = null) => {
             const badgeEl = document.getElementById('locationQualityBadge');
             if (!badgeEl) return;
             const meta = LOCATION_QUALITY_META[source] ?? LOCATION_QUALITY_META.unknown;
             badgeEl.className = meta.className;
             badgeEl.innerText = sourceYear ? `${meta.label} (${sourceYear})` : meta.label;
-        };
-
-        const setLocationManualLockHint = () => {
-            const lockHintEl = document.getElementById('locationManualLockHint');
-            if (!lockHintEl) return;
-            const locked = [];
-            if (locationEstimateState.manualLocks.tax) locked.push('tax');
-            if (locationEstimateState.manualLocks.insurance) locked.push('insurance');
-            if (!locked.length) {
-                lockHintEl.innerText = '';
-                return;
-            }
-            const lockLabel = locked.length === 2 ? 'tax and insurance values' : `${locked[0]} value`;
-            lockHintEl.innerText = `Manual ${lockLabel} locked. Use "Apply City Estimate" to overwrite.`;
-        };
-
-        const withProgrammaticLocationWrite = (fn) => {
-            locationEstimateState.isProgrammaticWrite = true;
-            try {
-                fn();
-            } finally {
-                locationEstimateState.isProgrammaticWrite = false;
-            }
-        };
-
-        const setCityAutocompleteOptions = (options) => {
-            const datalist = document.getElementById('locationCityOptions');
-            if (!datalist) return;
-            datalist.replaceChildren();
-            options.forEach((option) => {
-                const el = document.createElement('option');
-                el.value = String(option.display ?? '');
-                datalist.appendChild(el);
-            });
-        };
-
-        const fetchCitySuggestions = async (query) => {
-            const safeQuery = String(query ?? '').trim();
-            if (safeQuery.length < 2) return [];
-            if (locationLiveState.suggestionsAbortController) {
-                locationLiveState.suggestionsAbortController.abort();
-            }
-            const abortController = new AbortController();
-            locationLiveState.suggestionsAbortController = abortController;
-            try {
-                const url = `${CITY_SEARCH_ENDPOINT}?name=${encodeURIComponent(safeQuery)}&count=8&language=en&format=json&countryCode=US`;
-                const data = await fetchJsonWithTimeout(url, 12000, abortController.signal);
-                const rawResults = Array.isArray(data?.results) ? data.results : [];
-
-                const deduped = [];
-                const seen = new Set();
-                rawResults.forEach((result) => {
-                    const stateCode = getStateCode(result.admin1);
-                    const cityName = String(result.name ?? '').trim();
-                    if (!cityName || !stateCode) return;
-                    const display = `${cityName}, ${stateCode}`;
-                    const dedupeKey = normalizeLocationText(display);
-                    if (seen.has(dedupeKey)) return;
-                    seen.add(dedupeKey);
-                    deduped.push({
-                        name: cityName,
-                        stateCode,
-                        stateName: String(result.admin1 ?? ''),
-                        countyName: String(result.admin2 ?? ''),
-                        display,
-                        latitude: toFiniteNumber(result.latitude),
-                        longitude: toFiniteNumber(result.longitude),
-                        population: toFiniteNumber(result.population)
-                    });
-                });
-
-                deduped.sort((a, b) => b.population - a.population);
-                return deduped;
-            } finally {
-                if (locationLiveState.suggestionsAbortController === abortController) {
-                    locationLiveState.suggestionsAbortController = null;
-                }
-            }
-        };
-
-        const resolveCityCandidateFromInput = () => {
-            const cityInputEl = document.getElementById('locationCity');
-            const inputValue = cityInputEl?.value?.trim() ?? '';
-            if (!inputValue) return null;
-
-            const normalizedInput = normalizeLocationText(inputValue);
-            const matchedOption = locationLiveState.options.find(option => (
-                normalizeLocationText(option.display) === normalizedInput
-                || normalizeLocationText(option.name) === normalizedInput
-            ));
-            if (matchedOption) return matchedOption;
-
-            const stateCode = parseStateCodeFromText(inputValue);
-            const cityName = inputValue.split(',')[0]?.trim() ?? '';
-            if (!cityName) return null;
-            return {
-                name: cityName,
-                stateCode,
-                stateName: '',
-                countyName: '',
-                display: stateCode ? `${cityName}, ${stateCode}` : cityName,
-                latitude: 0,
-                longitude: 0,
-                population: 0
-            };
-        };
-
-        const findBestAcsPlaceRow = (rows, cityName) => {
-            const target = normalizeCityNameForMatch(cityName);
-            if (!target) return null;
-
-            let best = null;
-            let bestScore = 0;
-            rows.forEach((row) => {
-                const placeName = String(row.NAME ?? '').split(',')[0];
-                const normalizedPlace = normalizeCityNameForMatch(placeName);
-                const score = scoreNameMatch(target, normalizedPlace);
-                if (score > bestScore) {
-                    best = row;
-                    bestScore = score;
-                }
-            });
-            return bestScore > 0 ? best : null;
-        };
-
-        const findBestAcsCountyRow = (rows, countyName) => {
-            const target = normalizeCountyNameForMatch(countyName);
-            if (!target) return null;
-
-            let best = null;
-            let bestScore = 0;
-            rows.forEach((row) => {
-                const countyLabel = String(row.NAME ?? '').split(',')[0];
-                const normalizedCounty = normalizeCountyNameForMatch(countyLabel);
-                const score = scoreNameMatch(target, normalizedCounty);
-                if (score > bestScore) {
-                    best = row;
-                    bestScore = score;
-                }
-            });
-            return bestScore > 0 ? best : null;
-        };
-
-        const metroIncludesStateCode = (metroName, stateCode) => {
-            const code = String(stateCode ?? '').toUpperCase();
-            if (!code) return false;
-            const upper = String(metroName ?? '').toUpperCase();
-            const stateRegex = new RegExp(`(^|[^A-Z])${code}([^A-Z]|$)`);
-            return stateRegex.test(upper);
-        };
-
-        const findBestAcsMetroRow = (rows, { cityName, stateCode }) => {
-            const target = normalizeCityNameForMatch(cityName);
-            if (!target) return null;
-            const stateFiltered = rows.filter(row => metroIncludesStateCode(row.NAME, stateCode));
-            const pool = stateFiltered.length ? stateFiltered : rows;
-
-            let best = null;
-            let bestScore = 0;
-            pool.forEach((row) => {
-                const metroLabel = String(row.NAME ?? '').split(',')[0];
-                const normalizedMetro = normalizeMetroNameForMatch(metroLabel);
-                const score = scoreNameMatch(target, normalizedMetro);
-                if (score > bestScore) {
-                    best = row;
-                    bestScore = score;
-                }
-            });
-            return bestScore > 0 ? best : null;
-        };
-
-        const estimateAnnualInsuranceFromBuckets = (row) => {
-            let weightedTotal = 0;
-            let totalCount = 0;
-            MORTGAGED_INSURANCE_BUCKETS.forEach(({ variable, midpoint }) => {
-                const count = Math.max(0, toFiniteNumber(row[variable]));
-                if (count <= 0) return;
-                weightedTotal += count * midpoint;
-                totalCount += count;
-            });
-            if (totalCount <= 0) return 0;
-            return weightedTotal / totalCount;
-        };
-
-        const fetchAcsRows = async ({ year, geography, stateFips }) => {
-            const cacheKey = geography === 'metro' || geography === 'state'
-                ? `${year}`
-                : `${year}-${stateFips}`;
-            const cache = geography === 'place'
-                ? acsPlaceRowsCache
-                : geography === 'county'
-                    ? acsCountyRowsCache
-                    : geography === 'metro'
-                        ? acsMetroRowsCache
-                        : acsStateRowsCache;
-            if (cache.has(cacheKey)) return cache.get(cacheKey);
-
-            const params = new URLSearchParams({ get: ACS_REQUESTED_VARIABLES });
-            if (geography === 'place') {
-                params.set('for', 'place:*');
-                params.set('in', `state:${stateFips}`);
-            } else if (geography === 'county') {
-                params.set('for', 'county:*');
-                params.set('in', `state:${stateFips}`);
-            } else if (geography === 'metro') {
-                params.set('for', 'metropolitan statistical area/micropolitan statistical area:*');
-            } else if (geography === 'state') {
-                params.set('for', 'state:*');
-            } else {
-                throw new Error(`unsupported-geography-${geography}`);
-            }
-
-            const endpoint = `https://api.census.gov/data/${year}/acs/acs5?${params.toString()}`;
-            const data = await fetchJsonWithTimeout(endpoint, 22000);
-            if (!Array.isArray(data) || data.length < 2) {
-                cache.set(cacheKey, []);
-                return [];
-            }
-            const [header, ...rows] = data;
-            const objects = rows.map(row => Object.fromEntries(header.map((key, idx) => [key, row[idx]])));
-            cache.set(cacheKey, objects);
-            return objects;
-        };
-
-        const extractRatesFromAcsRow = (row) => {
-            const medianHomeValue = Math.max(0, toFiniteNumber(row?.B25077_001E));
-            const medianTax = Math.max(0, toFiniteNumber(row?.B25103_001E));
-            const annualInsuranceEstimate = Math.max(0, estimateAnnualInsuranceFromBuckets(row ?? {}));
-            if (medianHomeValue <= 0) return null;
-            const taxRate = clamp(medianTax / medianHomeValue, 0.002, 0.05);
-            const insuranceRate = clamp(annualInsuranceEstimate / medianHomeValue, 0.001, 0.04);
-            return {
-                medianHomeValue,
-                medianTax,
-                annualInsuranceEstimate,
-                taxRate,
-                insuranceRate
-            };
-        };
-
-        const fetchAcsLocationRates = async ({ cityName, countyName, stateCode }) => {
-            const normalizedStateCode = String(stateCode ?? '').toUpperCase();
-            const stateFips = STATE_FIPS_BY_CODE[normalizedStateCode];
-            if (!stateFips) throw new Error('missing-state-code');
-
-            for (const year of ACS_YEAR_CANDIDATES) {
-                try {
-                    const placeRows = await fetchAcsRows({ year, geography: 'place', stateFips });
-                    const placeRow = findBestAcsPlaceRow(placeRows, cityName);
-                    const placeRates = extractRatesFromAcsRow(placeRow);
-                    if (placeRow && placeRates) {
-                        return {
-                            ...placeRates,
-                            source: 'city',
-                            sourceName: String(placeRow.NAME ?? cityName),
-                            year
-                        };
-                    }
-                } catch (error) {
-                    // Continue down the fallback ladder.
-                }
-
-                try {
-                    if (countyName) {
-                        const countyRows = await fetchAcsRows({ year, geography: 'county', stateFips });
-                        const countyRow = findBestAcsCountyRow(countyRows, countyName);
-                        const countyRates = extractRatesFromAcsRow(countyRow);
-                        if (countyRow && countyRates) {
-                            return {
-                                ...countyRates,
-                                source: 'county',
-                                sourceName: String(countyRow.NAME ?? countyName),
-                                year
-                            };
-                        }
-                    }
-                } catch (error) {
-                    // Continue down the fallback ladder.
-                }
-
-                try {
-                    const metroRows = await fetchAcsRows({ year, geography: 'metro', stateFips });
-                    const metroRow = findBestAcsMetroRow(metroRows, { cityName, stateCode: normalizedStateCode });
-                    const metroRates = extractRatesFromAcsRow(metroRow);
-                    if (metroRow && metroRates) {
-                        return {
-                            ...metroRates,
-                            source: 'metro',
-                            sourceName: String(metroRow.NAME ?? cityName),
-                            year
-                        };
-                    }
-                } catch (error) {
-                    // Continue down the fallback ladder.
-                }
-
-                try {
-                    const stateRows = await fetchAcsRows({ year, geography: 'state', stateFips });
-                    const stateRow = stateRows.find(row => String(row.state ?? '') === stateFips);
-                    const stateRates = extractRatesFromAcsRow(stateRow);
-                    if (stateRow && stateRates) {
-                        return {
-                            ...stateRates,
-                            source: 'state',
-                            sourceName: String(stateRow.NAME ?? normalizedStateCode),
-                            year
-                        };
-                    }
-                } catch (error) {
-                    // Continue to next year before defaulting to U.S. baseline.
-                }
-            }
-
-            throw new Error('acs-location-data-unavailable');
         };
 
         const renderWarnings = (containerId, messages) => {
@@ -693,140 +392,181 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             }
         };
 
-        const getUsBaselineLocationProfile = () => ({
-            source: 'us',
-            sourceName: DEFAULT_LOCATION_PROFILE.label,
-            year: null,
-            taxRate: DEFAULT_LOCATION_PROFILE.taxRate,
-            insuranceRate: DEFAULT_LOCATION_PROFILE.insuranceRate
-        });
+        const getListingSourceLabel = (source) => {
+            const meta = LOCATION_QUALITY_META[source] ?? LOCATION_QUALITY_META.listing;
+            return meta.label;
+        };
+        const getListingDataSourceLabel = (source) => ({
+            'redfin.com': 'matching Redfin public listing',
+            'bing-search-snippet': 'search snippet result',
+            'yahoo-search-snippet': 'search snippet result',
+            'brave-search-snippet': 'search snippet result',
+            'search-snippet': 'search snippet result',
+            search: 'search snippet result'
+        })[source] ?? getListingSourceLabel(source);
 
-        const getLocationProfileFromCandidate = async (candidate) => {
-            if (!candidate?.stateCode) return getUsBaselineLocationProfile();
+        const formatSourceUrl = (rawUrl) => {
             try {
-                return await fetchAcsLocationRates({
-                    cityName: candidate.name,
-                    countyName: candidate.countyName,
-                    stateCode: candidate.stateCode
-                });
+                const parsed = new URL(rawUrl);
+                const path = parsed.pathname.replace(/\/$/, '');
+                const shortenedPath = path.length > 42 ? `${path.slice(0, 39)}...` : path;
+                return `${parsed.hostname}${shortenedPath}`;
             } catch (error) {
-                return getUsBaselineLocationProfile();
+                return String(rawUrl ?? '').trim();
             }
+        };
+
+        const fetchListingCostsFromUrl = async (listingUrl) => {
+            const endpoint = `${LISTING_COSTS_ENDPOINT}?url=${encodeURIComponent(listingUrl)}`;
+            return await fetchApiJsonWithTimeout(endpoint, 24000);
         };
 
         const setActiveLocationProfile = (profile) => {
             locationEstimateState.source = profile.source;
             locationEstimateState.sourceYear = profile.year ?? null;
             locationEstimateState.sourceName = profile.sourceName ?? '';
+            locationEstimateState.sourceUrl = profile.sourceUrl ?? '';
+            locationEstimateState.taxInsight = profile.taxInsight ?? '';
+            locationEstimateState.hoaInsight = profile.hoaInsight ?? '';
+            locationEstimateState.fetchInsight = profile.fetchInsight ?? '';
             setLocationQualityBadge(profile.source, profile.year ?? null);
-            setLocationManualLockHint();
         };
 
-        const getManualRetentionHint = ({ shouldWriteTax, shouldWriteInsurance }) => {
-            const retainedFields = [];
-            if (!shouldWriteTax) retainedFields.push('tax');
-            if (!shouldWriteInsurance) retainedFields.push('insurance');
-            if (!retainedFields.length) return '';
-            return ` Kept your manual ${retainedFields.join(' and ')} value${retainedFields.length > 1 ? 's' : ''}.`;
+        const buildLocationEstimateMessage = ({ listingProfile, pmiText }) => {
+            const sourceLabel = getListingSourceLabel(listingProfile.source);
+            const parts = [];
+            if (listingProfile.priceInsight) parts.push(listingProfile.priceInsight);
+            if (listingProfile.taxInsight) parts.push(listingProfile.taxInsight);
+            if (listingProfile.hoaInsight) parts.push(listingProfile.hoaInsight);
+            if (pmiText) parts.push(pmiText);
+            return parts.length
+                ? `Applied ${sourceLabel}: ${parts.join(', ')}.`
+                : `Applied ${sourceLabel}.`;
         };
 
-        const buildLocationEstimateMessage = ({ locationProfile, retainedText, pmiText }) => {
-            const qualityLabel = (LOCATION_QUALITY_META[locationProfile.source] ?? LOCATION_QUALITY_META.unknown).label;
-            const sourceLead = locationProfile.source === 'us'
-                ? `Used ${qualityLabel}`
-                : `Applied ${qualityLabel} data (${locationProfile.sourceName})`;
-            return `${sourceLead}. Tax ${formatPercent(locationProfile.taxRate)}, insurance ${formatPercent(locationProfile.insuranceRate)}.${retainedText} ${pmiText}`;
-        };
+        const updateEscrowBreakdownVisualization = ({ taxMonthly = 0, insuranceMonthly = 0, hoaMonthly = 0 }) => {
+            const tax = Math.max(0, Number(taxMonthly) || 0);
+            const insurance = Math.max(0, Number(insuranceMonthly) || 0);
+            const hoa = Math.max(0, Number(hoaMonthly) || 0);
+            const total = tax + insurance + hoa;
+            const escrowed = tax + insurance;
+            const taxYear = locationEstimateState.sourceYear ? String(locationEstimateState.sourceYear) : '';
 
-        const selectBestCityCandidate = ({ locationCity, candidate, suggestions }) => {
-            const options = Array.isArray(suggestions) ? suggestions : [];
-            if (!options.length) return candidate;
-
-            const normalizedInput = normalizeLocationText(locationCity);
-            const normalizedCandidateName = normalizeCityNameForMatch(candidate?.name ?? locationCity);
-            let best = null;
-            let bestScore = -1;
-            options.forEach((option) => {
-                let score = 0;
-                if (normalizeLocationText(option.display) === normalizedInput) score += 6;
-                if (normalizeLocationText(option.name) === normalizedInput) score += 5;
-                score += scoreNameMatch(normalizedCandidateName, normalizeCityNameForMatch(option.name));
-                if (candidate?.stateCode && option.stateCode === candidate.stateCode) score += 2;
-                if (score > bestScore) {
-                    best = option;
-                    bestScore = score;
-                }
-            });
-
-            if (!best) return candidate;
-            if (!candidate) return best;
-            return {
-                ...candidate,
-                ...best,
-                stateCode: candidate.stateCode || best.stateCode,
-                countyName: candidate.countyName || best.countyName,
-                stateName: candidate.stateName || best.stateName,
-                display: best.display || candidate.display
+            const setWidth = (id, value) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.style.width = total > 0 ? `${(Math.max(0, value) / total) * 100}%` : '0%';
             };
+
+            const setValue = (id, value, share) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.innerText = `${formatMoney(value)}/mo${share > 0 ? ` (${share.toFixed(1)}%)` : ''}`;
+            };
+
+            setWidth('escrowTaxSegment', tax);
+            setWidth('escrowInsuranceSegment', insurance);
+            setWidth('escrowHoaSegment', hoa);
+
+            setElText('escrowMonthlyTotal', `Escrowed monthly ${formatMoney(escrowed)}/mo`);
+            setElText('escrowTaxLabel', taxYear ? `Property tax ${taxYear}` : 'Property tax');
+            setValue('escrowTaxValue', tax, total > 0 ? (tax / total) * 100 : 0);
+            setElText('escrowInsuranceLabel', 'Homeowners insurance');
+            setValue('escrowInsuranceValue', insurance, total > 0 ? (insurance / total) * 100 : 0);
+            setElText('escrowHoaLabel', 'HOA outside escrow');
+            setValue('escrowHoaValue', hoa, total > 0 ? (hoa / total) * 100 : 0);
         };
 
-        async function applyLocationEstimateFromInputs({ forceOverwriteManual = false } = {}) {
-            const homePrice = getVal('homePrice');
-            if (homePrice <= 0) {
-                setLocationEstimateHint('Enter a home price first, then apply location estimates.', 'warn');
+        async function applyLocationEstimateFromInputs() {
+            const listingUrlEl = document.getElementById('propertyListingUrl');
+            const rawListingUrl = listingUrlEl?.value?.trim() ?? '';
+            if (!rawListingUrl) {
+                setLocationEstimateHint('Paste a Realtor listing URL, then apply listing data.', 'warn');
                 return false;
             }
 
-            const cityInputEl = document.getElementById('locationCity');
-            const locationCity = cityInputEl?.value?.trim() ?? '';
-            if (!locationCity) {
-                setLocationEstimateHint('Enter a city (for example: Austin, TX), then apply the estimate.', 'warn');
+            const listingSource = getListingSourceFromUrl(rawListingUrl);
+            if (!listingSource) {
+                setLocationEstimateHint('Use a supported Realtor listing URL.', 'warn');
                 return false;
             }
 
-            const downPayment = getVal('downPayment');
             const loanType = getSelectVal('loanType', 'conventional');
-            const annualPmiRate = estimateAnnualMortgageInsuranceRate({ loanType, homePrice, downPayment });
+
+            setLocationEstimateHint(`Fetching ${getListingSourceLabel(listingSource.source)} data...`, 'info');
+
+            let payload;
+            try {
+                payload = await fetchListingCostsFromUrl(listingSource.url);
+            } catch (error) {
+                setLocationEstimateHint('Listing data fetch was blocked or unavailable. Run `npm run dev` to start the local API server, then retry.', 'warn');
+                return false;
+            }
+
+            const tax = payload?.tax && Number.isFinite(Number(payload.tax.amountAnnual))
+                ? payload.tax
+                : null;
+            const hoa = payload?.hoa && Number.isFinite(Number(payload.hoa.amountMonthly))
+                ? payload.hoa
+                : { amountMonthly: 0, found: false };
+            const hoaMonthly = Math.max(0, Number(hoa.amountMonthly) || 0);
+            const listingHomePrice = payload?.homePrice?.found
+                ? Number(payload.homePrice.amount)
+                : 0;
+
+            if (listingHomePrice > RATE_EPSILON) {
+                setCurrencyInput('homePrice', listingHomePrice);
+                syncDownPaymentFromPercent();
+                syncMortgageInsuranceRateFromLoanInputs();
+            }
+
+            const homePrice = getVal('homePrice');
+            const downPayment = getVal('downPayment');
+            const annualPmiRate = homePrice > RATE_EPSILON
+                ? estimateAnnualMortgageInsuranceRate({ loanType, homePrice, downPayment })
+                : 0;
             const effectiveDown = clamp(downPayment, 0, homePrice);
             const ltv = homePrice > RATE_EPSILON
                 ? (Math.max(0, homePrice - effectiveDown) / homePrice)
-                : 1;
-            const pmiText = loanType === 'va'
-                ? 'PMI/MIP set to 0.00% for VA.'
-                : `PMI/MIP estimated at ${formatPercent(annualPmiRate)} for ${formatPercent(ltv)} LTV.`;
+                : 0;
+            const pmiText = homePrice > RATE_EPSILON
+                ? (loanType === 'va' || (loanType === 'conventional' && ltv <= 0.80 + RATE_EPSILON)
+                    ? 'PMI 0%'
+                    : `${loanType === 'fha' ? 'MIP' : 'PMI'} ${formatPercent(annualPmiRate)}`)
+                : '';
 
-            setLocationEstimateHint(`Fetching live city data for ${locationCity}...`, 'info');
+            if (tax && Number(tax.amountAnnual) > 0) setCurrencyInput('propertyTax', Number(tax.amountAnnual));
+            setCurrencyInput('hoaFee', hoaMonthly);
 
-            let candidate = resolveCityCandidateFromInput();
-            let suggestions = [];
-            try {
-                suggestions = await fetchCitySuggestions(locationCity);
-            } catch (error) {
-                suggestions = [];
-            }
-            locationLiveState.options = suggestions;
-            setCityAutocompleteOptions(suggestions);
-            candidate = selectBestCityCandidate({ locationCity, candidate, suggestions });
+            if (listingUrlEl && payload?.url) listingUrlEl.value = payload.url;
 
-            const locationProfile = await getLocationProfileFromCandidate(candidate);
+            const currentYear = Number(tax?.currentYear) || new Date().getFullYear();
+            const priceInsight = homePrice > RATE_EPSILON
+                ? `home price ${formatWholeMoney(homePrice)}`
+                : '';
+            const taxInsight = tax && Number(tax.amountAnnual) > 0
+                ? `property tax from ${tax.year ?? currentYear}: ${formatWholeMoney(Number(tax.amountAnnual))}/yr`
+                : 'property tax unchanged';
+            const hoaInsight = hoa?.found
+                ? `HOA ${formatWholeMoney(hoaMonthly)}/mo`
+                : 'HOA $0/mo';
+            const fetchInsight = payload?.warning === 'used-search-snippet-match' || payload?.warning === 'used-public-listing-match'
+                ? `Direct ${getListingSourceLabel(listingSource.source)} fetch was unavailable, so the lookup used a ${getListingDataSourceLabel(payload?.dataSource)}.`
+                : '';
+            const listingProfile = {
+                source: payload?.source || listingSource.source,
+                sourceName: getListingSourceLabel(payload?.source || listingSource.source),
+                sourceUrl: payload?.url || listingSource.url,
+                priceInsight,
+                year: tax?.year ?? currentYear,
+                taxInsight,
+                hoaInsight,
+                fetchInsight
+            };
 
-            const shouldWriteTax = forceOverwriteManual || !locationEstimateState.manualLocks.tax;
-            const shouldWriteInsurance = forceOverwriteManual || !locationEstimateState.manualLocks.insurance;
-            withProgrammaticLocationWrite(() => {
-                if (shouldWriteTax) setCurrencyInput('propertyTax', homePrice * locationProfile.taxRate);
-                if (shouldWriteInsurance) setCurrencyInput('homeInsurance', homePrice * locationProfile.insuranceRate);
-                setNumberInput('pmiRate', annualPmiRate * 100, 2);
-            });
-            if (forceOverwriteManual) {
-                locationEstimateState.manualLocks.tax = false;
-                locationEstimateState.manualLocks.insurance = false;
-            }
-            if (cityInputEl && candidate?.display) cityInputEl.value = candidate.display;
-
-            setActiveLocationProfile(locationProfile);
-            const retainedText = getManualRetentionHint({ shouldWriteTax, shouldWriteInsurance });
-            const message = buildLocationEstimateMessage({ locationProfile, retainedText, pmiText });
-            const tone = locationProfile.source === 'us' || Boolean(retainedText) ? 'warn' : 'success';
+            setActiveLocationProfile(listingProfile);
+            const message = buildLocationEstimateMessage({ listingProfile, pmiText });
+            const tone = tax?.isCurrentYear && hoa?.found ? 'success' : 'warn';
             setLocationEstimateHint(message, tone);
             return true;
         }
@@ -1104,16 +844,13 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
 
             if (typeof Chart === 'undefined') return;
             const payload = getBreakdownChartPayload();
-            if (breakdownPopupChart) breakdownPopupChart.destroy();
-            breakdownPopupChart = new Chart(chartCanvas, {
+            breakdownPopupChart = syncChartInstance(breakdownPopupChart, chartCanvas, {
                 type: 'doughnut',
                 data: {
                     labels: payload.labels,
                     datasets: [{ data: payload.data, backgroundColor: payload.colors }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
                     plugins: { legend: { position: 'bottom' } }
                 }
             });
@@ -1359,9 +1096,11 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 setElText('miOffRampNote', '80%/78% lines are modeled from scheduled balance and original value assumptions.');
             }
 
-            setElText('escrowIncluded', `Included in estimate: Property tax (${formatMoney(taxMonthly)}/mo) + homeowners insurance (${formatMoney(insuranceMonthly)}/mo).`);
-            setElText('escrowExcluded', `Typically excluded from escrow: HOA dues (${formatMoney(hoaMonthly)}/mo), even though included in total monthly housing estimate.`);
-            setElText('escrowAssumption', 'Assumes taxes/insurance are paid monthly. Confirm actual escrow setup with lender.');
+            updateEscrowBreakdownVisualization({ taxMonthly, insuranceMonthly, hoaMonthly });
+            const taxYearText = locationEstimateState.sourceYear ? ` from ${locationEstimateState.sourceYear}` : '';
+            setElText('escrowIncluded', `Included in estimate: Property tax${taxYearText} (${formatMoney(taxMonthly)}/mo) + homeowners insurance (${formatMoney(insuranceMonthly)}/mo).`);
+            setElText('escrowExcluded', `HOA dues (${formatMoney(hoaMonthly)}/mo) are shown separately and usually are not escrowed.`);
+            setElText('escrowAssumption', 'Assumes taxes and insurance are collected monthly in escrow. Confirm actual setup with your lender.');
 
             const totalOfPaymentsEstimate = schedule.totalPaid + loanProfile.upfrontFinanceCharges;
             const tip = loanProfile.noteLoanAmount > 0 ? (schedule.totalInterest / loanProfile.noteLoanAmount) : 0;
@@ -1449,6 +1188,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             const homePrice = getVal('homePrice');
             const percent = clamp(getVal('downPaymentPercent'), 0, 100);
             setCurrencyInput('downPayment', homePrice * (percent / 100));
+            setNumberInput('loanToValue', 100 - percent, 2);
             isSyncingDownPayment = false;
         };
 
@@ -1459,31 +1199,55 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             const downPayment = getVal('downPayment');
             const pct = homePrice > 0 ? clamp((downPayment / homePrice) * 100, 0, 100) : 0;
             setNumberInput('downPaymentPercent', pct, 2);
+            setNumberInput('loanToValue', 100 - pct, 2);
             isSyncingDownPayment = false;
+        };
+
+        const syncDownPaymentFromLoanToValue = () => {
+            if (isSyncingDownPayment) return;
+            isSyncingDownPayment = true;
+            const homePrice = getVal('homePrice');
+            const ltv = clamp(getVal('loanToValue'), 0, 100);
+            const downPaymentPct = 100 - ltv;
+            setNumberInput('downPaymentPercent', downPaymentPct, 2);
+            setCurrencyInput('downPayment', homePrice * (downPaymentPct / 100));
+            isSyncingDownPayment = false;
+        };
+
+        const syncMortgageInsuranceRateFromLoanInputs = () => {
+            const homePrice = getVal('homePrice');
+            const downPayment = getVal('downPayment');
+            const loanType = getSelectVal('loanType', 'conventional');
+            const annualPmiRate = homePrice > RATE_EPSILON
+                ? estimateAnnualMortgageInsuranceRate({ loanType, homePrice, downPayment })
+                : 0;
+            setNumberInput('pmiRate', annualPmiRate * 100, 2);
         };
 
         const formatSignedMoney = (value) => `${value >= 0 ? '+' : '-'}${formatMoney(Math.abs(value))}`;
 
         const getAssumptionSnapshot = () => {
             const sourceMeta = LOCATION_QUALITY_META[locationEstimateState.source] ?? LOCATION_QUALITY_META.unknown;
-            const sourceName = locationEstimateState.sourceName || 'Manual/default values';
-            const sourceYear = locationEstimateState.sourceYear ? String(locationEstimateState.sourceYear) : 'Not specified';
-            const taxLock = locationEstimateState.manualLocks.tax ? 'Tax manually overridden' : 'Tax follows applied estimate';
-            const insuranceLock = locationEstimateState.manualLocks.insurance ? 'Insurance manually overridden' : 'Insurance follows applied estimate';
+            const sourceName = locationEstimateState.sourceUrl
+                ? formatSourceUrl(locationEstimateState.sourceUrl)
+                : (locationEstimateState.sourceName || 'Manual/default values');
+            const sourceYear = locationEstimateState.sourceYear ? String(locationEstimateState.sourceYear) : 'No tax year applied';
+            const taxInsight = locationEstimateState.taxInsight || 'Property tax can be entered or edited manually.';
+            const hoaInsight = locationEstimateState.hoaInsight || 'HOA can be entered or edited manually.';
             return {
                 sourceMeta,
                 sourceName,
                 sourceYear,
-                taxLock,
-                insuranceLock
+                taxInsight,
+                hoaInsight
             };
         };
 
         const renderAssumptionTransparency = () => {
             const snapshot = getAssumptionSnapshot();
-            const sourceText = `Source quality: ${snapshot.sourceMeta.label}. Basis: ${snapshot.sourceName}.`;
-            const yearText = `Source year: ${snapshot.sourceYear}.`;
-            const overrideText = `${snapshot.taxLock}. ${snapshot.insuranceLock}.`;
+            const sourceText = `Source: ${snapshot.sourceMeta.label}. URL: ${snapshot.sourceName}.`;
+            const yearText = `Tax year: ${snapshot.sourceYear}.`;
+            const overrideText = `${snapshot.taxInsight} ${snapshot.hoaInsight}`;
 
             setElText('dataConfidenceLine', sourceText);
             setElText('dataFreshnessLine', yearText);
@@ -1704,7 +1468,8 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             isPopupOpen,
             renderBreakdownPopupContent,
             renderAmortizationPopupTable,
-            renderWarnings
+            renderWarnings,
+            syncChart: syncChartInstance
         });
         const affordabilityCalculator = createAffordabilityCalculator({
             state: affordUiState,
@@ -1714,7 +1479,8 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             formatMoney,
             formatPercent,
             renderWarnings,
-            updateModeVisibility
+            updateModeVisibility,
+            syncChart: syncChartInstance
         });
         const rentBuyCalculator = createRentBuyCalculator({
             state: rentBuyUiState,
@@ -1726,13 +1492,15 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             formatBreakEven,
             renderWarnings,
             updateModeVisibility,
+            syncChart: syncChartInstance,
             getConventionalPmiThresholdPct,
             runRentVsBuyScenario
         });
         const refinanceCalculator = createRefinanceCalculator({
             state: refiUiState,
             getVal,
-            formatMoney
+            formatMoney,
+            syncChart: syncChartInstance
         });
 
         // --- CALCULATION LOGIC ---
@@ -1842,11 +1610,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 version: 1,
                 savedAt: new Date().toISOString(),
                 activeTab: getActiveTabId(),
-                fields,
-                manualLocks: {
-                    tax: Boolean(locationEstimateState.manualLocks.tax),
-                    insurance: Boolean(locationEstimateState.manualLocks.insurance)
-                }
+                fields
             };
         };
 
@@ -1864,17 +1628,9 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 }
             });
 
-            if (payload.manualLocks && typeof payload.manualLocks === 'object') {
-                locationEstimateState.manualLocks.tax = Boolean(payload.manualLocks.tax);
-                locationEstimateState.manualLocks.insurance = Boolean(payload.manualLocks.insurance);
-            } else {
-                locationEstimateState.manualLocks.tax = false;
-                locationEstimateState.manualLocks.insurance = false;
-            }
-            setLocationManualLockHint();
-
             updateModeVisibility();
             updateConventionalPmiControls();
+            if (!Object.prototype.hasOwnProperty.call(payload.fields, 'loanToValue')) syncPercentFromDownPayment();
 
             const targetTab = isKnownTab(payload.activeTab) ? payload.activeTab : 'mortgage';
             switchTab(targetTab);
@@ -2032,19 +1788,6 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 runCoreCalcs();
             }));
 
-            ['propertyTax', 'homeInsurance'].forEach((id) => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                const fieldKey = id === 'propertyTax' ? 'tax' : 'insurance';
-                ['input', 'change'].forEach((evt) => {
-                    el.addEventListener(evt, () => {
-                        if (locationEstimateState.isProgrammaticWrite) return;
-                        locationEstimateState.manualLocks[fieldKey] = true;
-                        setLocationManualLockHint();
-                    });
-                });
-            });
-
             ['rbPrice', 'rbRent', 'rbApprec', 'rbRentInf', 'rbMaint', 'rbClosing', 'rbInvestReturn', 'rbTaxTreatment', 'rbMarginalTax', 'rbStdDeduction']
                 .forEach(id => addInputChangeListener(id, calcRentVsBuy));
 
@@ -2056,7 +1799,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 runMortgageAndRentCalcs();
             });
 
-            const locationCityEl = document.getElementById('locationCity');
+            const propertyListingUrlEl = document.getElementById('propertyListingUrl');
             const applyLocationEstimateBtn = document.getElementById('applyLocationEstimateBtn');
             const applyLiveRateBtn = document.getElementById('applyLiveRateBtn');
             const applyLocationEstimate = async (options = {}) => {
@@ -2088,7 +1831,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                         : ` ${latest.requestedTerm}-year loans use the ${benchmarkLabel} benchmark.`;
                     setLiveRateHint(`Applied ${latest.rate.toFixed(2)}% from ${benchmarkLabel} PMMS (${latest.date}).${termNote}`, latest.exactMatch ? 'success' : 'warn');
                 } catch (error) {
-                    setLiveRateHint('Live-rate fetch blocked on this host. Run `npm run dev` and open http://localhost:4173, then retry.', 'warn');
+                    setLiveRateHint('Live-rate fetch blocked on this host. Run `npm run dev` to start the local API server, then retry.', 'warn');
                 } finally {
                     isApplyingLiveRate = false;
                     if (applyLiveRateBtn) applyLiveRateBtn.disabled = false;
@@ -2096,7 +1839,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             };
             if (applyLocationEstimateBtn) {
                 applyLocationEstimateBtn.addEventListener('click', () => {
-                    void applyLocationEstimate({ forceOverwriteManual: true });
+                    void applyLocationEstimate();
                 });
             }
             if (applyLiveRateBtn) {
@@ -2104,17 +1847,8 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                     void applyLiveRate();
                 });
             }
-            if (locationCityEl) {
-                locationCityEl.addEventListener('input', () => {
-                    const query = locationCityEl.value.trim();
-                    if (locationLiveState.suggestionsAbortController) {
-                        locationLiveState.suggestionsAbortController.abort();
-                    }
-                    locationLiveState.options = [];
-                    setCityAutocompleteOptions([]);
-                    if (query.length < 2) return;
-                });
-                locationCityEl.addEventListener('keydown', (e) => {
+            if (propertyListingUrlEl) {
+                propertyListingUrlEl.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
                         void applyLocationEstimate();
@@ -2124,16 +1858,25 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
 
             document.getElementById('homePrice').addEventListener('input', () => {
                 syncDownPaymentFromPercent();
+                syncMortgageInsuranceRateFromLoanInputs();
                 runCoreCalcs();
             });
 
             document.getElementById('downPaymentPercent').addEventListener('input', () => {
                 syncDownPaymentFromPercent();
+                syncMortgageInsuranceRateFromLoanInputs();
+                runMortgageAndRentCalcs();
+            });
+
+            document.getElementById('loanToValue').addEventListener('input', () => {
+                syncDownPaymentFromLoanToValue();
+                syncMortgageInsuranceRateFromLoanInputs();
                 runMortgageAndRentCalcs();
             });
 
             document.getElementById('downPayment').addEventListener('input', () => {
                 syncPercentFromDownPayment();
+                syncMortgageInsuranceRateFromLoanInputs();
                 runMortgageAndRentCalcs();
             });
 
@@ -2145,6 +1888,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 else pctInput.value = 5;
 
                 syncDownPaymentFromPercent();
+                syncMortgageInsuranceRateFromLoanInputs();
                 runMortgageAndRentCalcs();
             });
 
@@ -2154,10 +1898,10 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             updateModeVisibility();
             updateConventionalPmiControls();
             setLocationQualityBadge('unknown');
-            setLocationManualLockHint();
-            setLocationEstimateHint('Enter City, ST and press Enter or click Apply City Estimate. Fallback ladder: City -> County -> Metro -> State -> U.S. baseline.');
+            setLocationEstimateHint('Paste a Realtor listing URL and apply it to auto-fill home price, property tax, and HOA. HOA defaults to $0 when no fee is found.');
             setLiveRateHint('Uses Freddie Mac PMMS weekly averages via FRED (15-year and 30-year series).');
             syncDownPaymentFromPercent();
+            syncMortgageInsuranceRateFromLoanInputs();
             syncModalBodyLock();
             runCoreCalcs();
             calcRefinance();

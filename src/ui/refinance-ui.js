@@ -3,7 +3,8 @@ import { RATE_EPSILON, computeMonthlyPayment, simulateFixedPaymentLoan } from '.
 export const createRefinanceCalculator = ({
     state,
     getVal,
-    formatMoney
+    formatMoney,
+    syncChart
 }) => {
     const calcRefinance = () => {
         const balance = getVal('refiBal');
@@ -55,8 +56,7 @@ export const createRefinanceCalculator = ({
 
         if (typeof Chart !== 'undefined') {
             try {
-                if (state.refiChart) state.refiChart.destroy();
-                state.refiChart = new Chart(document.getElementById('refiChart'), {
+                state.refiChart = syncChart(state.refiChart, document.getElementById('refiChart'), {
                     type: 'line',
                     data: {
                         labels: Array.from({ length: chartLength }, (_, i) => `Mo ${i + 1}`),
@@ -65,7 +65,7 @@ export const createRefinanceCalculator = ({
                             { label: 'Refi Cost', data: newData, borderColor: '#8b5cf6', fill: true, backgroundColor: 'rgba(139, 92, 246, 0.1)', pointRadius: 0 }
                         ]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false } }
+                    options: { interaction: { mode: 'index', intersect: false } }
                 });
             } catch (e) {
                 console.error('Refi chart error:', e);

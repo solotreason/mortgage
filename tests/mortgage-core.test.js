@@ -37,10 +37,12 @@ test('estimateAnnualMortgageInsuranceRate follows loan-type and LTV policy', () 
     const vaRate = estimateAnnualMortgageInsuranceRate({ loanType: 'va', homePrice: 400000, downPayment: 0 });
     const fhaRate = estimateAnnualMortgageInsuranceRate({ loanType: 'fha', homePrice: 400000, downPayment: 32000 });
     const convRate = estimateAnnualMortgageInsuranceRate({ loanType: 'conventional', homePrice: 400000, downPayment: 20000 });
+    const convTwentyDownRate = estimateAnnualMortgageInsuranceRate({ loanType: 'conventional', homePrice: 400000, downPayment: 80000 });
 
     assert.equal(vaRate, 0);
     assert.equal(fhaRate, 0.0055);
     assert.equal(convRate, 0.0075);
+    assert.equal(convTwentyDownRate, 0);
 });
 
 test('computeMortgageInsuranceForPeriod turns off at conventional threshold and FHA 11-year rule', () => {
@@ -64,6 +66,16 @@ test('computeMortgageInsuranceForPeriod turns off at conventional threshold and 
         originationLtv: 0.875,
         convPmiDropLtv: 0.80
     });
+    const convOffAtOrigination80Ltv = computeMortgageInsuranceForPeriod({
+        loanType: 'conventional',
+        balanceBeforePayment: 320000,
+        homePrice: 400000,
+        annualPmiRate: 0.0075,
+        periodIndex: 1,
+        periodsPerYear: 12,
+        originationLtv: 0.80,
+        convPmiDropLtv: 0.78
+    });
     const fhaOffAfter11Years = computeMortgageInsuranceForPeriod({
         loanType: 'fha',
         balanceBeforePayment: 300000,
@@ -77,6 +89,7 @@ test('computeMortgageInsuranceForPeriod turns off at conventional threshold and 
 
     assert.ok(convOn > 0);
     assert.equal(convOff, 0);
+    assert.equal(convOffAtOrigination80Ltv, 0);
     assert.equal(fhaOffAfter11Years, 0);
 });
 

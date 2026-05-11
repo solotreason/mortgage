@@ -15,7 +15,8 @@ export const createMortgageCalculator = ({
     isPopupOpen,
     renderBreakdownPopupContent,
     renderAmortizationPopupTable,
-    renderWarnings
+    renderWarnings,
+    syncChart
 }) => {
     const calcMortgage = () => {
         const homePrice = getVal('homePrice');
@@ -78,6 +79,12 @@ export const createMortgageCalculator = ({
         aprEl.innerText = `${(aprNominalAnnual * 100).toFixed(2)}%`;
         aprEl.title = `Effective annual cost: ${(aprEffectiveAnnual * 100).toFixed(2)}%`;
 
+        const baseLtv = homePrice > 0 ? (loanProfile.baseLoan / homePrice) : 0;
+        const noteLtv = homePrice > 0 ? (loanProfile.noteLoanAmount / homePrice) : 0;
+        const ltvEl = document.getElementById('ltvDisplay');
+        ltvEl.innerText = formatPercent(baseLtv, 2);
+        ltvEl.title = `Base loan: ${formatMoney(loanProfile.baseLoan)}. Note amount with financed costs: ${formatMoney(loanProfile.noteLoanAmount)} (${formatPercent(noteLtv, 2)} LTV).`;
+
         const govtFeeLabel = loanType === 'fha' ? 'FHA UFMIP' : 'VA Funding Fee';
         const breakdownRows = [
             { label: 'Down Payment', value: loanProfile.effectiveDownPayment },
@@ -138,12 +145,11 @@ export const createMortgageCalculator = ({
 
         if (typeof Chart !== 'undefined') {
             try {
-                if (state.breakdownChart) state.breakdownChart.destroy();
                 const payload = getBreakdownChartPayload();
-                state.breakdownChart = new Chart(document.getElementById('breakdownChart'), {
+                state.breakdownChart = syncChart(state.breakdownChart, document.getElementById('breakdownChart'), {
                     type: 'doughnut',
                     data: { labels: payload.labels, datasets: [{ data: payload.data, backgroundColor: payload.colors }] },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                    options: { plugins: { legend: { position: 'bottom' } } }
                 });
             } catch (e) {
                 console.error('Chart error:', e);

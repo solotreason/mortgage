@@ -26,7 +26,10 @@ const requiredIds = [
     'tab-mortgage',
     'tab-afford',
     'tab-rentbuy',
-    'tab-refinance'
+    'tab-refinance',
+    'propertyListingUrl',
+    'loanToValue',
+    'ltvDisplay'
 ];
 
 requiredIds.forEach((id) => {
