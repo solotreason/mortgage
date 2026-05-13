@@ -139,6 +139,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             30: 'MORTGAGE30US'
         });
         const LIVE_RATE_PROXY_ENDPOINT = '/api/live-rate';
+        const STATIC_LIVE_RATES_ENDPOINT = 'data/live-rates.json';
         const FRED_CSV_ENDPOINTS_BY_SERIES = (seriesId) => ([
             `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(seriesId)}`,
             `https://fred.stlouisfed.org/series/${encodeURIComponent(seriesId)}/downloaddata/${encodeURIComponent(seriesId)}.csv`
@@ -272,21 +273,50 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             return null;
         };
 
+        const isLocalApiHost = () => {
+            if (typeof window === 'undefined' || !window.location) return false;
+            const hostname = String(window.location.hostname ?? '').toLowerCase();
+            return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || window.location.protocol === 'file:';
+        };
+
+        const fetchStaticLiveRate = async (seriesSelection) => {
+            const cacheBust = `v=${encodeURIComponent(String(Date.now()))}`;
+            const separator = STATIC_LIVE_RATES_ENDPOINT.includes('?') ? '&' : '?';
+            const payload = await fetchJsonWithTimeout(`${STATIC_LIVE_RATES_ENDPOINT}${separator}${cacheBust}`, 12000);
+            const series = payload?.series?.[seriesSelection.seriesId] ?? null;
+            const date = String(series?.date ?? '').trim();
+            const rate = Number.parseFloat(series?.rate);
+            if (!date || !Number.isFinite(rate)) throw new Error(`static-live-rate-missing-${seriesSelection.seriesId}`);
+            return {
+                ...seriesSelection,
+                date,
+                rate
+            };
+        };
+
         const fetchLatestFreddieMacRate = async (termYears) => {
             const seriesSelection = resolveFredSeriesForTerm(termYears);
-            try {
-                const payload = await fetchApiJsonWithTimeout(`${LIVE_RATE_PROXY_ENDPOINT}?series=${encodeURIComponent(seriesSelection.seriesId)}`, 12000);
-                const date = String(payload?.date ?? '').trim();
-                const rate = Number.parseFloat(payload?.rate);
-                if (date && Number.isFinite(rate)) {
-                    return {
-                        ...seriesSelection,
-                        date,
-                        rate
-                    };
+            if (isLocalApiHost()) {
+                try {
+                    const payload = await fetchApiJsonWithTimeout(`${LIVE_RATE_PROXY_ENDPOINT}?series=${encodeURIComponent(seriesSelection.seriesId)}`, 12000);
+                    const date = String(payload?.date ?? '').trim();
+                    const rate = Number.parseFloat(payload?.rate);
+                    if (date && Number.isFinite(rate)) {
+                        return {
+                            ...seriesSelection,
+                            date,
+                            rate
+                        };
+                    }
+                } catch (error) {
+                    // Local proxy may be unavailable. Continue through static and direct sources.
                 }
+            }
+
+            try {
+                return await fetchStaticLiveRate(seriesSelection);
             } catch (error) {
-                // Proxy may be unavailable (e.g., opening index.html directly). Fall back to direct fetch.
+                // GitHub Pages serves this file from the repo. If it is missing, try direct FRED fetch.
             }
 
             const endpoints = FRED_CSV_ENDPOINTS_BY_SERIES(seriesSelection.seriesId);
@@ -1831,7 +1861,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                         : ` ${latest.requestedTerm}-year loans use the ${benchmarkLabel} benchmark.`;
                     setLiveRateHint(`Applied ${latest.rate.toFixed(2)}% from ${benchmarkLabel} PMMS (${latest.date}).${termNote}`, latest.exactMatch ? 'success' : 'warn');
                 } catch (error) {
-                    setLiveRateHint('Live-rate fetch blocked on this host. Run `npm run dev` to start the local API server, then retry.', 'warn');
+                    setLiveRateHint('Live-rate data is unavailable on this host. Refresh after the latest GitHub Pages deploy, or run `npm run dev` locally and retry.', 'warn');
                 } finally {
                     isApplyingLiveRate = false;
                     if (applyLiveRateBtn) applyLiveRateBtn.disabled = false;
