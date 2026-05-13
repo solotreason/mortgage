@@ -3,7 +3,6 @@ import {
     computeMonthlyPayment,
     computeMortgageInsuranceForPeriod
 } from './src/core/mortgage-core.js';
-import { getListingSourceFromUrl } from './src/core/listing-cost-parser.js';
 import { createMortgageCalculator } from './src/ui/mortgage-ui.js';
 import { createAffordabilityCalculator } from './src/ui/afford-ui.js';
 import { createRentBuyCalculator } from './src/ui/rentbuy-ui.js';
@@ -13,6 +12,27 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
         const formatMoney = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number.isFinite(n) ? n : 0);
         const formatWholeMoney = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number.isFinite(n) ? n : 0);
         const formatPercent = (n, digits = 2) => `${(Number.isFinite(n) ? n * 100 : 0).toFixed(digits)}%`;
+        const LISTING_SOURCE_DOMAINS = Object.freeze({
+            realtor: ['realtor.com']
+        });
+
+        const getListingSourceFromUrl = (rawUrl) => {
+            let parsed;
+            try {
+                parsed = new URL(String(rawUrl ?? '').trim());
+            } catch (error) {
+                return null;
+            }
+
+            if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+            const host = parsed.hostname.toLowerCase();
+            for (const [source, domains] of Object.entries(LISTING_SOURCE_DOMAINS)) {
+                if (domains.some(domain => host === domain || host.endsWith(`.${domain}`))) {
+                    return { source, url: parsed.toString(), hostname: host };
+                }
+            }
+            return null;
+        };
 
         const getVal = (id) => {
             const el = document.getElementById(id);
@@ -139,6 +159,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             30: 'MORTGAGE30US'
         });
         const LIVE_RATE_PROXY_ENDPOINT = '/api/live-rate';
+        const STATIC_LIVE_RATES_ENDPOINT = 'data/live-rates.json';
         const FRED_CSV_ENDPOINTS_BY_SERIES = (seriesId) => ([
             `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(seriesId)}`,
             `https://fred.stlouisfed.org/series/${encodeURIComponent(seriesId)}/downloaddata/${encodeURIComponent(seriesId)}.csv`
@@ -163,6 +184,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             sourceYear: null,
             sourceName: '',
             sourceUrl: '',
+            propertyFacts: null,
             taxInsight: '',
             hoaInsight: '',
             fetchInsight: ''
@@ -272,21 +294,50 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             return null;
         };
 
+        const isLocalApiHost = () => {
+            if (typeof window === 'undefined' || !window.location) return false;
+            const hostname = String(window.location.hostname ?? '').toLowerCase();
+            return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || window.location.protocol === 'file:';
+        };
+
+        const fetchStaticLiveRate = async (seriesSelection) => {
+            const cacheBust = `v=${encodeURIComponent(String(Date.now()))}`;
+            const separator = STATIC_LIVE_RATES_ENDPOINT.includes('?') ? '&' : '?';
+            const payload = await fetchJsonWithTimeout(`${STATIC_LIVE_RATES_ENDPOINT}${separator}${cacheBust}`, 12000);
+            const series = payload?.series?.[seriesSelection.seriesId] ?? null;
+            const date = String(series?.date ?? '').trim();
+            const rate = Number.parseFloat(series?.rate);
+            if (!date || !Number.isFinite(rate)) throw new Error(`static-live-rate-missing-${seriesSelection.seriesId}`);
+            return {
+                ...seriesSelection,
+                date,
+                rate
+            };
+        };
+
         const fetchLatestFreddieMacRate = async (termYears) => {
             const seriesSelection = resolveFredSeriesForTerm(termYears);
-            try {
-                const payload = await fetchApiJsonWithTimeout(`${LIVE_RATE_PROXY_ENDPOINT}?series=${encodeURIComponent(seriesSelection.seriesId)}`, 12000);
-                const date = String(payload?.date ?? '').trim();
-                const rate = Number.parseFloat(payload?.rate);
-                if (date && Number.isFinite(rate)) {
-                    return {
-                        ...seriesSelection,
-                        date,
-                        rate
-                    };
+            if (isLocalApiHost()) {
+                try {
+                    const payload = await fetchApiJsonWithTimeout(`${LIVE_RATE_PROXY_ENDPOINT}?series=${encodeURIComponent(seriesSelection.seriesId)}`, 12000);
+                    const date = String(payload?.date ?? '').trim();
+                    const rate = Number.parseFloat(payload?.rate);
+                    if (date && Number.isFinite(rate)) {
+                        return {
+                            ...seriesSelection,
+                            date,
+                            rate
+                        };
+                    }
+                } catch (error) {
+                    // Local proxy may be unavailable. Continue through static and direct sources.
                 }
+            }
+
+            try {
+                return await fetchStaticLiveRate(seriesSelection);
             } catch (error) {
-                // Proxy may be unavailable (e.g., opening index.html directly). Fall back to direct fetch.
+                // GitHub Pages serves this file from the repo. If it is missing, try direct FRED fetch.
             }
 
             const endpoints = FRED_CSV_ENDPOINTS_BY_SERIES(seriesSelection.seriesId);
@@ -426,6 +477,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             locationEstimateState.sourceYear = profile.year ?? null;
             locationEstimateState.sourceName = profile.sourceName ?? '';
             locationEstimateState.sourceUrl = profile.sourceUrl ?? '';
+            locationEstimateState.propertyFacts = profile.propertyFacts ?? null;
             locationEstimateState.taxInsight = profile.taxInsight ?? '';
             locationEstimateState.hoaInsight = profile.hoaInsight ?? '';
             locationEstimateState.fetchInsight = profile.fetchInsight ?? '';
@@ -442,6 +494,43 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             return parts.length
                 ? `Applied ${sourceLabel}: ${parts.join(', ')}.`
                 : `Applied ${sourceLabel}.`;
+        };
+
+        const formatListingFactNumber = (value, digits = 1) => {
+            const amount = Number(value);
+            if (!Number.isFinite(amount) || amount <= 0) return '';
+            if (Number.isInteger(amount)) return amount.toLocaleString('en-US');
+            return amount.toFixed(digits).replace(/\.0+$/, '');
+        };
+
+        const formatListingSquareFeet = (value) => {
+            const amount = Number(value);
+            if (!Number.isFinite(amount) || amount <= 0) return '';
+            return Math.round(amount).toLocaleString('en-US');
+        };
+
+        const buildListingFactsText = (propertyFacts) => {
+            const facts = propertyFacts ?? {};
+            const parts = [];
+
+            if (facts.beds?.found) {
+                const bedsText = formatListingFactNumber(facts.beds.value, 1);
+                if (bedsText) parts.push(`${bedsText} bd`);
+            }
+            if (facts.baths?.found) {
+                const bathsText = formatListingFactNumber(facts.baths.value, 1);
+                if (bathsText) parts.push(`${bathsText} ba`);
+            }
+            if (facts.squareFeet?.found) {
+                const sqftText = formatListingSquareFeet(facts.squareFeet.value);
+                if (sqftText) parts.push(`${sqftText} sq ft`);
+            }
+            if (facts.location?.found) {
+                const locationText = String(facts.location.value ?? '').trim();
+                if (locationText) parts.push(locationText);
+            }
+
+            return parts.length ? `Listing details: ${parts.join(' • ')}.` : 'Listing details unavailable.';
         };
 
         const updateEscrowBreakdownVisualization = ({ taxMonthly = 0, insuranceMonthly = 0, hoaMonthly = 0 }) => {
@@ -557,6 +646,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 source: payload?.source || listingSource.source,
                 sourceName: getListingSourceLabel(payload?.source || listingSource.source),
                 sourceUrl: payload?.url || listingSource.url,
+                propertyFacts: payload?.propertyFacts ?? null,
                 priceInsight,
                 year: tax?.year ?? currentYear,
                 taxInsight,
@@ -801,12 +891,52 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
 
         const renderBreakdownPopupContent = () => {
             const detailsEl = document.getElementById('breakdownPopupDetails');
+            const loanDetailsEl = document.getElementById('breakdownPopupLoanDetails');
             const chartCanvas = document.getElementById('breakdownPopupChart');
-            if (!detailsEl || !chartCanvas) return;
+            if (!detailsEl || !loanDetailsEl || !chartCanvas) return;
 
             const rows = getVisibleBreakdownRows();
+
+            const rowsByLabel = new Map(rows.map((row) => [row.label, row]));
+            const totalMonthly = rows.reduce((sum, row) => sum + Math.max(0, Number(row.value) || 0), 0);
+            const homePrice = getVal('homePrice');
+            const downPayment = getVal('downPayment');
+            const loanAmount = Math.max(0, homePrice - downPayment);
+            const interestRate = getVal('interestRate') / 100;
+            const loanTermYears = getSelectVal('loanTerm', '30');
+            const taxYear = locationEstimateState.sourceYear ? String(locationEstimateState.sourceYear) : 'Not applied';
+            const pmiRow = rowsByLabel.get('PMI/MIP');
+
+            loanDetailsEl.replaceChildren();
+            [
+                { label: 'Home Price', value: homePrice > 0 ? formatMoney(homePrice) : 'N/A' },
+                { label: 'Down Payment', value: homePrice > 0 ? formatMoney(downPayment) : 'N/A' },
+                { label: 'Base Loan', value: loanAmount > 0 ? formatMoney(loanAmount) : 'N/A' },
+                { label: 'Interest Rate', value: formatPercent(interestRate) },
+                { label: 'Loan Term', value: `${loanTermYears} years` },
+                { label: 'Tax Year', value: taxYear },
+                { label: 'P&I', value: rowsByLabel.get('P&I') ? formatMoney(rowsByLabel.get('P&I').value) : formatMoney(0) },
+                ...(pmiRow ? [{ label: 'PMI/MIP', value: formatMoney(pmiRow.value) }] : []),
+                { label: 'Monthly Total', value: formatMoney(totalMonthly) }
+            ].forEach((item) => {
+                const line = document.createElement('div');
+                line.className = 'flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2';
+
+                const label = document.createElement('div');
+                label.className = 'font-medium text-gray-700';
+                label.innerText = String(item.label ?? '');
+
+                const value = document.createElement('div');
+                value.className = 'font-semibold text-gray-900 text-right';
+                value.innerText = String(item.value ?? '');
+
+                line.appendChild(label);
+                line.appendChild(value);
+                loanDetailsEl.appendChild(line);
+            });
+
+            detailsEl.replaceChildren();
             if (!rows.length) {
-                detailsEl.replaceChildren();
                 const empty = document.createElement('p');
                 empty.className = 'text-sm text-gray-500';
                 empty.innerText = 'No payment components available.';
@@ -819,7 +949,6 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             }
 
             const total = rows.reduce((sum, row) => sum + row.value, 0);
-            detailsEl.replaceChildren();
             rows.forEach((row) => {
                 const share = total > 0 ? ((row.value / total) * 100) : 0;
                 const line = document.createElement('div');
@@ -1232,12 +1361,14 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 ? formatSourceUrl(locationEstimateState.sourceUrl)
                 : (locationEstimateState.sourceName || 'Manual/default values');
             const sourceYear = locationEstimateState.sourceYear ? String(locationEstimateState.sourceYear) : 'No tax year applied';
+            const propertyFactsText = buildListingFactsText(locationEstimateState.propertyFacts);
             const taxInsight = locationEstimateState.taxInsight || 'Property tax can be entered or edited manually.';
             const hoaInsight = locationEstimateState.hoaInsight || 'HOA can be entered or edited manually.';
             return {
                 sourceMeta,
                 sourceName,
                 sourceYear,
+                propertyFactsText,
                 taxInsight,
                 hoaInsight
             };
@@ -1247,10 +1378,12 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
             const snapshot = getAssumptionSnapshot();
             const sourceText = `Source: ${snapshot.sourceMeta.label}. URL: ${snapshot.sourceName}.`;
             const yearText = `Tax year: ${snapshot.sourceYear}.`;
+            const factsText = snapshot.propertyFactsText;
             const overrideText = `${snapshot.taxInsight} ${snapshot.hoaInsight}`;
 
             setElText('dataConfidenceLine', sourceText);
             setElText('dataFreshnessLine', yearText);
+            setElText('dataPropertyFactsLine', factsText);
             setElText('dataManualOverrideLine', overrideText);
 
             setElText('affordAssumptionSource', sourceText);
@@ -1710,12 +1843,11 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                 btn.addEventListener('click', () => switchTab(btn.dataset.tab));
             });
 
-            const openBreakdownPopupBtn = document.getElementById('openBreakdownPopupBtn');
-            if (openBreakdownPopupBtn) {
-                openBreakdownPopupBtn.addEventListener('click', () => {
+            document.querySelectorAll('[data-breakdown-popup-trigger]').forEach((button) => {
+                button.addEventListener('click', () => {
                     openBreakdownPopup();
                 });
-            }
+            });
 
             const openAmortizationPopupBtn = document.getElementById('openAmortizationPopupBtn');
             if (openAmortizationPopupBtn) {
@@ -1831,7 +1963,7 @@ import { createRefinanceCalculator } from './src/ui/refinance-ui.js';
                         : ` ${latest.requestedTerm}-year loans use the ${benchmarkLabel} benchmark.`;
                     setLiveRateHint(`Applied ${latest.rate.toFixed(2)}% from ${benchmarkLabel} PMMS (${latest.date}).${termNote}`, latest.exactMatch ? 'success' : 'warn');
                 } catch (error) {
-                    setLiveRateHint('Live-rate fetch blocked on this host. Run `npm run dev` to start the local API server, then retry.', 'warn');
+                    setLiveRateHint('Live-rate data is unavailable on this host. Refresh after the latest GitHub Pages deploy, or run `npm run dev` locally and retry.', 'warn');
                 } finally {
                     isApplyingLiveRate = false;
                     if (applyLiveRateBtn) applyLiveRateBtn.disabled = false;

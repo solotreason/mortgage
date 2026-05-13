@@ -31,6 +31,28 @@ const DEFAULT_HOME_PRICE = Object.freeze({
     found: false,
     sourcePath: ''
 });
+const DEFAULT_PROPERTY_FACTS = Object.freeze({
+    beds: Object.freeze({
+        value: 0,
+        found: false,
+        sourcePath: ''
+    }),
+    baths: Object.freeze({
+        value: 0,
+        found: false,
+        sourcePath: ''
+    }),
+    squareFeet: Object.freeze({
+        value: 0,
+        found: false,
+        sourcePath: ''
+    }),
+    location: Object.freeze({
+        value: '',
+        found: false,
+        sourcePath: ''
+    })
+});
 const SEARCH_ENGINES = Object.freeze([
     {
         name: 'bing',
@@ -298,7 +320,13 @@ const hasListingCosts = (costs) => Boolean(costs?.tax || costs?.hoa?.found || co
 const mergePartialListingCosts = (primaryCosts, fallbackCosts) => ({
     tax: primaryCosts?.tax ?? fallbackCosts?.tax ?? null,
     hoa: primaryCosts?.hoa?.found ? primaryCosts.hoa : (fallbackCosts?.hoa?.found ? fallbackCosts.hoa : (primaryCosts?.hoa ?? fallbackCosts?.hoa ?? DEFAULT_HOA)),
-    homePrice: primaryCosts?.homePrice?.found ? primaryCosts.homePrice : (fallbackCosts?.homePrice?.found ? fallbackCosts.homePrice : (primaryCosts?.homePrice ?? fallbackCosts?.homePrice ?? DEFAULT_HOME_PRICE))
+    homePrice: primaryCosts?.homePrice?.found ? primaryCosts.homePrice : (fallbackCosts?.homePrice?.found ? fallbackCosts.homePrice : (primaryCosts?.homePrice ?? fallbackCosts?.homePrice ?? DEFAULT_HOME_PRICE)),
+    propertyFacts: {
+        beds: primaryCosts?.propertyFacts?.beds?.found ? primaryCosts.propertyFacts.beds : (fallbackCosts?.propertyFacts?.beds?.found ? fallbackCosts.propertyFacts.beds : (primaryCosts?.propertyFacts?.beds ?? fallbackCosts?.propertyFacts?.beds ?? DEFAULT_PROPERTY_FACTS.beds)),
+        baths: primaryCosts?.propertyFacts?.baths?.found ? primaryCosts.propertyFacts.baths : (fallbackCosts?.propertyFacts?.baths?.found ? fallbackCosts.propertyFacts.baths : (primaryCosts?.propertyFacts?.baths ?? fallbackCosts?.propertyFacts?.baths ?? DEFAULT_PROPERTY_FACTS.baths)),
+        squareFeet: primaryCosts?.propertyFacts?.squareFeet?.found ? primaryCosts.propertyFacts.squareFeet : (fallbackCosts?.propertyFacts?.squareFeet?.found ? fallbackCosts.propertyFacts.squareFeet : (primaryCosts?.propertyFacts?.squareFeet ?? fallbackCosts?.propertyFacts?.squareFeet ?? DEFAULT_PROPERTY_FACTS.squareFeet)),
+        location: primaryCosts?.propertyFacts?.location?.found ? primaryCosts.propertyFacts.location : (fallbackCosts?.propertyFacts?.location?.found ? fallbackCosts.propertyFacts.location : (primaryCosts?.propertyFacts?.location ?? fallbackCosts?.propertyFacts?.location ?? DEFAULT_PROPERTY_FACTS.location))
+    }
 });
 
 const getSearchFieldValue = (parsedCosts, field) => {
@@ -417,10 +445,18 @@ const mergeListingCosts = (primaryCosts, fallbackCosts) => {
     const fallbackHoa = fallbackCosts?.hoa;
     const primaryHomePrice = primaryCosts?.homePrice;
     const fallbackHomePrice = fallbackCosts?.homePrice;
+    const primaryFacts = primaryCosts?.propertyFacts;
+    const fallbackFacts = fallbackCosts?.propertyFacts;
     return {
         tax: primaryCosts?.tax ?? fallbackCosts?.tax ?? null,
         hoa: primaryHoa?.found ? primaryHoa : (fallbackHoa?.found ? fallbackHoa : (primaryHoa ?? fallbackHoa ?? DEFAULT_HOA)),
-        homePrice: primaryHomePrice?.found ? primaryHomePrice : (fallbackHomePrice?.found ? fallbackHomePrice : (primaryHomePrice ?? fallbackHomePrice ?? DEFAULT_HOME_PRICE))
+        homePrice: primaryHomePrice?.found ? primaryHomePrice : (fallbackHomePrice?.found ? fallbackHomePrice : (primaryHomePrice ?? fallbackHomePrice ?? DEFAULT_HOME_PRICE)),
+        propertyFacts: {
+            beds: primaryFacts?.beds?.found ? primaryFacts.beds : (fallbackFacts?.beds?.found ? fallbackFacts.beds : (primaryFacts?.beds ?? fallbackFacts?.beds ?? DEFAULT_PROPERTY_FACTS.beds)),
+            baths: primaryFacts?.baths?.found ? primaryFacts.baths : (fallbackFacts?.baths?.found ? fallbackFacts.baths : (primaryFacts?.baths ?? fallbackFacts?.baths ?? DEFAULT_PROPERTY_FACTS.baths)),
+            squareFeet: primaryFacts?.squareFeet?.found ? primaryFacts.squareFeet : (fallbackFacts?.squareFeet?.found ? fallbackFacts.squareFeet : (primaryFacts?.squareFeet ?? fallbackFacts?.squareFeet ?? DEFAULT_PROPERTY_FACTS.squareFeet)),
+            location: primaryFacts?.location?.found ? primaryFacts.location : (fallbackFacts?.location?.found ? fallbackFacts.location : (primaryFacts?.location ?? fallbackFacts?.location ?? DEFAULT_PROPERTY_FACTS.location))
+        }
     };
 };
 
@@ -447,6 +483,7 @@ const fetchListingCosts = async (rawUrl) => {
         tax: costs.tax,
         hoa: costs.hoa,
         homePrice: costs.homePrice,
+        propertyFacts: costs.propertyFacts,
         dataSource: searchFallback?.dataSource ?? sourceInfo.source,
         dataUrl: searchFallback?.dataUrl ?? sourceInfo.url,
         warning: searchFallback ? 'used-search-snippet-match' : (directError ? 'listing-source-blocked' : undefined)
