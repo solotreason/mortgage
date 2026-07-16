@@ -1,14 +1,14 @@
 {
-  "updatedAt": "2026-07-09T19:05:51.217Z",
+  "updatedAt": "2026-07-16T18:37:28.979Z",
   "source": "FRED",
   "series": {
     "MORTGAGE30US": {
-      "date": "2026-07-09",
-      "rate": 6.49
+      "date": "2026-07-16",
+      "rate": 6.55
     },
     "MORTGAGE15US": {
-      "date": "2026-07-09",
-      "rate": 5.82
+      "date": "2026-07-16",
+      "rate": 5.93
     }
   }
 }
